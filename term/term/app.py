@@ -873,7 +873,7 @@ Underline {
     dock: bottom;
     height: 3;
     background: $bg1;
-    padding: 0 25%;
+    padding: 0 20 0 20;
 }
 .input-bar Input {
     background: $bg1;
