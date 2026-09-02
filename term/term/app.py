@@ -878,11 +878,9 @@ Underline {
 /* -- Input bar -- */
 .input-bar {
     dock: bottom;
-    height: auto;
-    max-height: 5;
+    height: 3;
     background: $bg1;
-    border-top: solid $border;
-    padding: 1 15 0 15;
+    padding: 0 12;
 }
 .input-bar Input {
     background: $bg3;
@@ -891,6 +889,21 @@ Underline {
 }
 .input-bar Input:focus {
     border: tall $accent1;
+}
+
+/* -- Command suggestions -- */
+.cmd-suggestions {
+    dock: bottom;
+    height: auto;
+    max-height: 12;
+    background: $bg2;
+    color: $text;
+    padding: 0 12;
+    display: none;
+    border-top: solid $border;
+}
+.cmd-suggestions.visible {
+    display: block;
 }
 
 /* -- Status bar -- */
@@ -1055,6 +1068,7 @@ class ChatTab(Vertical):
                     id=f"empty-{self.tab_id}",
                 )
             yield Label(" Procesando...", classes="loading", id=f"load-{self.tab_id}")
+            yield Static("", classes="cmd-suggestions", id=f"cmdsug-{self.tab_id}")
             with Horizontal(classes="input-bar"):
                 yield Input(
                     placeholder="Mensaje o /comando...",
@@ -1341,7 +1355,7 @@ class TermApp(App):
         new_vars = self.get_css_variables()
         self.stylesheet.set_variables(new_vars)
         self.stylesheet.reparse()
-        self.screen._update_styles()
+        self.screen.update_node_styles()
         self.screen.refresh(layout=True)
 
     # ------------------------------------------------------------ helpers
@@ -1585,6 +1599,35 @@ class TermApp(App):
 
     # ------------------------------------------------------------ input handler
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Show command suggestions when typing /."""
+        iid = event.input.id or ""
+        if not iid.startswith("input-chat"):
+            return
+        tab_id = iid.replace("input-", "")
+        text = event.value
+        try:
+            sug = self.query_one(f"#cmdsug-{tab_id}", Static)
+        except NoMatches:
+            return
+
+        if text.startswith("/") and not text.startswith("/ "):
+            query = text.lower()
+            slash_cmds = {k: v for k, v in COMMANDS_HELP.items() if k.startswith("/")}
+            matches = []
+            for c, d in slash_cmds.items():
+                if query == "/" or c.lower().startswith(query.split()[0]):
+                    matches.append(f"  [bold]{c}[/]  [dim]{d}[/]")
+            if matches:
+                sug.update("\n".join(matches[:10]))
+                sug.add_class("visible")
+            else:
+                sug.update("")
+                sug.remove_class("visible")
+        else:
+            sug.update("")
+            sug.remove_class("visible")
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         iid = event.input.id or ""
         if not iid.startswith("input-chat"):
@@ -1596,6 +1639,12 @@ class TermApp(App):
             return
 
         tab_id = iid.replace("input-", "")
+
+        # Hide command suggestions
+        try:
+            self.query_one(f"#cmdsug-{tab_id}", Static).remove_class("visible")
+        except NoMatches:
+            pass
 
         # Permissions dialog response
         if self._awaiting_permissions:
