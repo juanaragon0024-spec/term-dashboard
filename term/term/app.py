@@ -772,10 +772,17 @@ Screen {
     width: 1fr;
     padding: 0 1;
 }
-#theme-label {
-    color: $muted;
+#theme-cycle-btn {
+    background: $bg3;
+    color: $accent1;
+    border: none;
     dock: right;
     padding: 0 2;
+    min-width: 16;
+}
+#theme-cycle-btn:hover {
+    background: $accent1;
+    color: $bg1;
 }
 
 /* -- Main area -- */
@@ -1076,6 +1083,7 @@ class ChatTab(Vertical):
 class TermApp(App):
     TITLE = "Term"
     CSS = APP_CSS
+    COMMANDS = set()  # Disable built-in command palette (has theme selector)
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Salir"),
@@ -1230,7 +1238,7 @@ class TermApp(App):
         theme_name = THEMES.get(self.theme_key, THEMES["neon"])["name"]
         yield Horizontal(
             Label("[bold]TERM[/]", id="top-bar-title"),
-            Label(f"Tema: {theme_name}", id="theme-label"),
+            Button(f"Tema: {theme_name}", id="theme-cycle-btn"),
             id="top-bar",
         )
         with Horizontal(id="main"):
@@ -1341,7 +1349,7 @@ class TermApp(App):
         # Update theme button label
         try:
             theme_name = THEMES.get(value, THEMES["neon"])["name"]
-            self.query_one("#theme-label", Label).update(f"Tema: {theme_name}")
+            self.query_one("#theme-cycle-btn", Button).label = f"Tema: {theme_name}"
         except NoMatches:
             pass
         # Force full CSS refresh
@@ -1579,6 +1587,14 @@ class TermApp(App):
 
     def _show_panel_sync(self, panel: str) -> None:
         self.run_worker(self._show_panel(panel), exclusive=True)
+
+    # ------------------------------------------------------------ button handler
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "theme-cycle-btn":
+            keys = list(THEMES.keys())
+            idx = keys.index(self.theme_key) if self.theme_key in keys else 0
+            self.theme_key = keys[(idx + 1) % len(keys)]
 
     # ------------------------------------------------------------ input handler
 
