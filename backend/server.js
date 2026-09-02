@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 const app = express();
 const PORT = 3001;
@@ -8,24 +8,20 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-const SYSTEM_CONTEXT = `You are Term, a terminal AI assistant. You can control this macOS computer.
-When the user asks you to open apps, change songs, adjust volume, etc., use osascript/AppleScript.
-
-Examples:
-- Open Safari: osascript -e 'tell application "Safari" to activate'
-- Play/pause Spotify: osascript -e 'tell application "Spotify" to playpause'
-- Next song: osascript -e 'tell application "Spotify" to next track'
-- Set volume: osascript -e 'set volume output volume 50'
-- Open any app: open -a "App Name"
-
-You have full shell access. Execute commands directly. Be concise.`;
+// Resolve claude path at startup
+let CLAUDE = 'claude';
+try {
+  CLAUDE = execSync('bash -lc "which claude"', { encoding: 'utf-8' }).trim();
+} catch {}
+console.log('Claude path:', CLAUDE);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', claude: CLAUDE });
 });
 
 app.post('/api/chat', (req, res) => {
   const { message, workdir, model, effort } = req.body;
+  console.log('POST /api/chat:', message?.substring(0, 50));
 
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
@@ -34,9 +30,10 @@ app.post('/api/chat', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
 
   const cwd = workdir || process.env.HOME;
-  const args = ['-p', message, '--max-turns', '15', '--append-system-prompt', SYSTEM_CONTEXT];
+  const args = ['-p', message, '--max-turns', '15'];
 
   if (model && model !== 'claude') {
     const modelMap = { 'claude-opus': 'opus', 'claude-haiku': 'haiku' };
@@ -47,36 +44,52 @@ app.post('/api/chat', (req, res) => {
     args.push('--effort', effort);
   }
 
-  const claude = spawn('claude', args, {
+  console.log('Spawning:', CLAUDE, args.join(' '));
+
+  const claude = spawn(CLAUDE, args, {
     cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env },
   });
 
-  let fullOutput = '';
   let tokenEstimate = 0;
+  let finished = false;
 
   claude.stdout.on('data', (data) => {
+    if (finished) return;
     const text = data.toString();
-    fullOutput += text;
+    console.log('stdout chunk:', text.length, 'bytes');
     tokenEstimate += text.split(/\s+/).length * 2;
     res.write(`data: ${JSON.stringify({ type: 'chunk', content: text, tokens: tokenEstimate })}\n\n`);
   });
 
   claude.stderr.on('data', (data) => {
-    res.write(`data: ${JSON.stringify({ type: 'status', content: data.toString() })}\n\n`);
+    console.log('stderr:', data.toString().substring(0, 100));
   });
 
   claude.on('close', (code) => {
+    console.log('claude exited:', code);
+    if (finished) return;
+    finished = true;
     res.write(`data: ${JSON.stringify({ type: 'done', exitCode: code, tokens: tokenEstimate })}\n\n`);
     res.end();
   });
 
   claude.on('error', (err) => {
+    console.error('spawn error:', err.message);
+    if (finished) return;
+    finished = true;
     res.write(`data: ${JSON.stringify({ type: 'error', content: err.message })}\n\n`);
     res.end();
   });
 
-  req.on('close', () => { claude.kill(); });
+  // Kill claude only if client actually disconnects mid-stream
+  res.on('close', () => {
+    if (!finished) {
+      finished = true;
+      try { claude.kill(); } catch {}
+    }
+  });
 });
 
 app.listen(PORT, () => {

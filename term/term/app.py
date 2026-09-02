@@ -768,6 +768,8 @@ class TermApp(App):
 
     def watch_theme_key(self, value: str) -> None:
         """Force CSS variable re-evaluation when theme changes."""
+        if not self.is_running:
+            return
         self._refresh_status()
         self.call_later(self._apply_theme)
 
