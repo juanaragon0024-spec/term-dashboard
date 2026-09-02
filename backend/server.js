@@ -19,6 +19,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', claude: CLAUDE });
 });
 
+app.get('/api/file', (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) return res.status(400).json({ error: 'path required' });
+  const fs = require('fs');
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    res.json({ path: filePath, content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/files', (req, res) => {
+  const dir = req.query.path || process.env.HOME;
+  const fs = require('fs');
+  try {
+    const items = fs.readdirSync(dir, { withFileTypes: true }).map(d => ({
+      name: d.name,
+      isDir: d.isDirectory(),
+    }));
+    res.json({ path: dir, items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/chat', (req, res) => {
   const { message, workdir, model, effort } = req.body;
   console.log('POST /api/chat:', message?.substring(0, 50));

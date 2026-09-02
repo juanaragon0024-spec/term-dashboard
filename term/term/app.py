@@ -23,6 +23,8 @@ from textual.widgets import (
     Footer,
     Input,
     Label,
+    ListItem,
+    ListView,
     Markdown,
     Static,
     TabbedContent,
@@ -127,7 +129,7 @@ AI_MODELS: dict[str, dict] = {
 
 EFFORT_LEVELS = ["low", "medium", "high", "max"]
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 # ---------------------------------------------------------------------------
 # Languages
@@ -619,6 +621,8 @@ COMMANDS_HELP: dict[str, str] = {
     "/browse [url]":          "Abrir URL en navegador (selector de navegadores)",
     "/browser <nombre>":      "Establecer navegador por defecto (brave, chrome, safari)",
     "/lang [codigo]":         "Cambiar idioma (es, en, pt, fr, de, it, zh, ja, ko, ar)",
+    "/files":                 "Refrescar panel de archivos",
+    "/attach <ruta>":         "Adjuntar archivo al siguiente mensaje",
 }
 
 SHORTCUTS_HELP: dict[str, str] = {
@@ -802,7 +806,9 @@ Tabs {
 Tab {
     background: $bg2;
     color: $muted;
-    padding: 0 2;
+    padding: 0 3;
+    min-width: 12;
+    text-style: bold;
 }
 Tab:hover {
     color: $accent1;
@@ -876,12 +882,14 @@ Underline {
     max-height: 8;
     background: $bg2;
     border-top: solid $border;
-    padding: 1 2 0 2;
+    padding: 1 8 0 8;
+    margin: 0 8;
 }
 .input-bar Input {
     background: $bg3;
     color: $text;
     border: tall $border;
+    height: 3;
 }
 .input-bar Input:focus {
     border: tall $accent1;
@@ -890,10 +898,11 @@ Underline {
 /* -- Status bar -- */
 #status-bar {
     dock: bottom;
-    height: 1;
+    height: 2;
     background: $bg2;
     color: $muted;
     padding: 0 2;
+    text-style: bold;
 }
 #status-effort {
     color: $accent4;
@@ -941,6 +950,37 @@ Underline {
 Footer {
     background: $bg2;
     color: $muted;
+    height: 2;
+    text-style: bold;
+}
+
+/* -- File panel -- */
+#file-panel {
+    width: 28;
+    background: $bg2;
+    border-left: solid $border;
+    padding: 1;
+}
+#file-panel-title {
+    color: $accent1;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+#file-panel ListView {
+    background: $bg2;
+    scrollbar-color: $border;
+    scrollbar-color-hover: $accent1;
+}
+#file-panel ListItem {
+    background: $bg2;
+    color: $text;
+    padding: 0 1;
+}
+#file-panel ListItem:hover {
+    background: $bg3;
+}
+#chat-col {
+    width: 1fr;
 }
 """
 
@@ -1060,6 +1100,7 @@ class TermApp(App):
         self._awaiting_permissions = False
         self._permissions_granted: bool = cfg.get("permissions_granted", False)
         self._lang: str = cfg.get("lang", "es")
+        self._attached_content: str = ""
         super().__init__()
         self.workdir: str = workdir or cfg.get("workdir", str(Path.home()))
         self.theme_key = theme or cfg.get("theme", "neon")
@@ -1183,15 +1224,19 @@ class TermApp(App):
             Button(f"[ {theme_name} ]", classes="theme-btn", id="theme-cycle-btn"),
             id="top-bar",
         )
-        with Vertical(id="main"):
-            with TabbedContent(id="main-tabs"):
-                tab_id = self._next_tab_id()
-                chat = ChatTab(
-                    self.current_model, tab_id, self.theme_key, self.workdir,
-                )
-                self._tabs[tab_id] = chat
-                with TabPane("Chat", id=f"pane-{tab_id}"):
-                    yield chat
+        with Horizontal(id="main"):
+            with Vertical(id="chat-col"):
+                with TabbedContent(id="main-tabs"):
+                    tab_id = self._next_tab_id()
+                    chat = ChatTab(
+                        self.current_model, tab_id, self.theme_key, self.workdir,
+                    )
+                    self._tabs[tab_id] = chat
+                    with TabPane("Chat", id=f"pane-{tab_id}"):
+                        yield chat
+            with Vertical(id="file-panel"):
+                yield Label(self.workdir, id="file-panel-title")
+                yield ListView(id="file-list")
         yield Horizontal(
             Label("", id="status-effort"),
             Label("  ", id="status-sep1"),
@@ -1234,6 +1279,7 @@ class TermApp(App):
 
     async def on_mount(self) -> None:
         self._refresh_status()
+        self._refresh_file_panel()
         if not self._permissions_granted:
             # Schedule permissions dialog after mount completes
             self.set_timer(0.1, self._show_permissions_dialog_deferred)
@@ -1289,6 +1335,9 @@ class TermApp(App):
             self.query_one("#theme-cycle-btn", Button).label = f"[ {theme_name} ]"
         except NoMatches:
             pass
+        # Re-apply CSS variables and reparse
+        self.stylesheet.set_variables(self.get_css_variables())
+        self.stylesheet.reparse()
         self.refresh(layout=True)
 
     # ------------------------------------------------------------ helpers
@@ -1329,6 +1378,72 @@ class TermApp(App):
             "permissions_granted": self._permissions_granted,
             "lang": self._lang,
         })
+
+    def _refresh_file_panel(self) -> None:
+        """Refresh file panel with contents of current workdir."""
+        try:
+            lv = self.query_one("#file-list", ListView)
+            lv.clear()
+            title = self.query_one("#file-panel-title", Label)
+            wd = self.workdir
+            if len(wd) > 24:
+                wd = "..." + wd[-21:]
+            title.update(wd)
+            workpath = Path(self.workdir)
+            if not workpath.is_dir():
+                return
+            # Parent directory entry
+            lv.append(ListItem(Label("[dir] ..")))
+            entries = sorted(workpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+            for entry in entries:
+                if entry.name.startswith("."):
+                    continue
+                if entry.is_dir():
+                    lv.append(ListItem(Label(f"[dir] {entry.name}")))
+                else:
+                    lv.append(ListItem(Label(entry.name)))
+        except (NoMatches, OSError):
+            pass
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """When a file is selected in the file panel, handle navigation or attach."""
+        try:
+            label_widget = event.item.query_one(Label)
+            text = str(label_widget.renderable)
+        except Exception:
+            return
+        if text == "[dir] ..":
+            parent = str(Path(self.workdir).parent)
+            self.workdir = parent
+            for chat in self._tabs.values():
+                chat.workdir = parent
+            self._refresh_status()
+            self._refresh_file_panel()
+            return
+        if text.startswith("[dir] "):
+            dirname = text.replace("[dir] ", "")
+            new_path = str(Path(self.workdir) / dirname)
+            if os.path.isdir(new_path):
+                self.workdir = new_path
+                for chat in self._tabs.values():
+                    chat.workdir = new_path
+                self._refresh_status()
+                self._refresh_file_panel()
+            return
+        # Regular file -- append path to active input
+        file_path = str(Path(self.workdir) / text)
+        tab_id = self._active_tab_id()
+        if tab_id:
+            try:
+                inp = self.query_one(f"#input-{tab_id}", Input)
+                current = inp.value
+                if current:
+                    inp.value = current + " " + file_path
+                else:
+                    inp.value = file_path
+                inp.focus()
+            except NoMatches:
+                pass
 
     def _active_tab_id(self) -> str | None:
         """Return the tab_id of the currently active chat pane, or None."""
@@ -1604,7 +1719,13 @@ class TermApp(App):
         except NoMatches:
             pass
 
-        self._run_ai(chat, text)
+        # Prepend attached file content if any
+        prompt = text
+        if self._attached_content:
+            prompt = self._attached_content + text
+            self._attached_content = ""
+
+        self._run_ai(chat, prompt)
 
     # ------------------------------------------------------------ slash commands
 
@@ -1657,6 +1778,7 @@ class TermApp(App):
                     if chat:
                         chat.workdir = expanded
                     self._refresh_status()
+                    self._refresh_file_panel()
                     self.notify(f"{self._t('dir_set')}: {expanded}", timeout=1)
                 else:
                     self.notify(f"{self._t('not_found')}: {arg}", timeout=2)
@@ -1968,6 +2090,29 @@ class TermApp(App):
                     msgs.scroll_end(animate=False)
                 except NoMatches:
                     pass
+
+        elif cmd == "/files":
+            self._refresh_file_panel()
+            self.notify("File panel refreshed", timeout=1)
+
+        elif cmd == "/attach":
+            if arg:
+                file_path = os.path.expanduser(arg.strip())
+                if not os.path.isabs(file_path):
+                    file_path = os.path.join(self.workdir, file_path)
+                if os.path.isfile(file_path):
+                    try:
+                        content = Path(file_path).read_text(errors="replace")
+                        if len(content) > 10000:
+                            content = content[:10000] + "\n... (truncated)"
+                        self._attached_content = f"[File: {file_path}]\n```\n{content}\n```\n\n"
+                        self.notify(f"Attached: {os.path.basename(file_path)}", timeout=2)
+                    except Exception as e:
+                        self.notify(f"Error reading file: {e}", timeout=2)
+                else:
+                    self.notify(f"File not found: {file_path}", timeout=2)
+            else:
+                self.notify("Usage: /attach <path>", timeout=2)
 
         else:
             self.notify(self._t("unknown_cmd", cmd=cmd), timeout=2)
