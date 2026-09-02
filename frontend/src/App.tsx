@@ -28,7 +28,7 @@ type Effort = (typeof EFFORT_LEVELS)[number]
 
 function App() {
   const [tabs, setTabs] = useState<ChatTabData[]>([
-    { id: 'tab-1', name: 'Chat 1', model: 'claude', modelName: 'Claude', messages: [], isLoading: false },
+    { id: 'tab-1', name: 'Chat', model: 'claude', modelName: 'Claude', messages: [], isLoading: false },
   ])
   const [activeTabId, setActiveTabId] = useState('tab-1')
   const [activePanel, setActivePanel] = useState<'chat' | 'settings' | 'apps' | 'tools' | 'help'>('chat')
@@ -59,7 +59,7 @@ function App() {
     const id = `tab-${tabCounter.current}`
     const newTab: ChatTabData = {
       id,
-      name: name || `Chat ${tabCounter.current}`,
+      name: name || `Chat ${tabs.length + 1}`,
       model: defaultModel,
       modelName: models[defaultModel] || 'Claude',
       messages: [],
@@ -68,13 +68,17 @@ function App() {
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(id)
     setActivePanel('chat')
-  }, [defaultModel])
+  }, [defaultModel, tabs.length])
 
   const closeTab = useCallback((tabId: string) => {
     if (tabs.length <= 1) return
     abortRefs.current[tabId]?.abort()
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId)
+      // If only one tab left, rename it to "Chat"
+      if (next.length === 1) {
+        next[0] = { ...next[0], name: 'Chat' }
+      }
       if (activeTabId === tabId && next.length > 0) setActiveTabId(next[0].id)
       return next
     })

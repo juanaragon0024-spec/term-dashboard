@@ -135,7 +135,7 @@ COMMANDS_HELP = {
     "/model <name>":    "Cambiar modelo (claude, claude-opus, claude-haiku)",
     "/name <texto>":    "Renombrar la pestana activa",
     "/workdir <ruta>":  "Cambiar directorio de trabajo",
-    "/new [nombre]":    "Nueva pestana de chat",
+    "/new [nombre] [modelo]": "Nueva pestana (ej: /new MiChat claude-opus)",
     "/close":           "Cerrar pestana activa",
     "/clear":           "Limpiar chat",
     "/save":            "Guardar configuracion",
@@ -563,7 +563,7 @@ class TermApp(App):
                     tab_id = self._make_tab_id()
                     chat = ChatTab(self.current_model, tab_id, self.theme_key, self.workdir)
                     self._chat_tabs[tab_id] = chat
-                    with TabPane("Chat 1", id=f"pane-{tab_id}"):
+                    with TabPane("Chat", id=f"pane-{tab_id}"):
                         yield chat
         yield Horizontal(
             Label("", id="status-effort"),
@@ -878,8 +878,19 @@ class TermApp(App):
                     self.notify(f"No existe: {arg}", timeout=2)
 
         elif cmd == "/new":
-            name = arg or None
-            await self._create_tab(name)
+            # /new [nombre] [modelo]
+            # ej: /new MiChat claude-opus
+            parts2 = arg.split() if arg else []
+            name = None
+            model = None
+            for p in parts2:
+                if p in AI_MODELS:
+                    model = p
+                elif name is None:
+                    name = p
+                else:
+                    name += " " + p
+            await self._create_tab(name, model)
 
         elif cmd == "/close":
             await self.action_close_tab()
@@ -910,14 +921,15 @@ class TermApp(App):
 
     # ── Tab management ──
 
-    async def _create_tab(self, name: str | None = None) -> None:
+    async def _create_tab(self, name: str | None = None, model_key: str | None = None) -> None:
         tab_id = self._make_tab_id()
-        model_key = self.current_model
-        model = AI_MODELS.get(model_key, AI_MODELS["claude"])
-        chat = ChatTab(model_key, tab_id, self.theme_key, self.workdir)
+        mk = model_key or self.current_model
+        model = AI_MODELS.get(mk, AI_MODELS["claude"])
+        chat = ChatTab(mk, tab_id, self.theme_key, self.workdir)
         self._chat_tabs[tab_id] = chat
 
-        tab_name = name or f"Chat {self.tab_counter}"
+        # Name logic: first tab is "Chat", additional are "Chat N" or custom
+        tab_name = name or f"Chat {len(self._chat_tabs)}"
         tabs = self.query_one("#main-tabs", TabbedContent)
         pane = TabPane(tab_name, id=f"pane-{tab_id}")
         await tabs.add_pane(pane)
@@ -947,6 +959,14 @@ class TermApp(App):
                 try: chat._proc.kill()
                 except ProcessLookupError: pass
             await tabs.remove_pane(active)
+            # If only one tab left, rename it to "Chat"
+            if len(self._chat_tabs) == 1:
+                remaining_id = list(self._chat_tabs.keys())[0]
+                try:
+                    tab = tabs.get_tab(f"pane-{remaining_id}")
+                    tab.label = "Chat"
+                except Exception:
+                    pass
 
     def action_clear_tab(self) -> None:
         tabs = self.query_one("#main-tabs", TabbedContent)
