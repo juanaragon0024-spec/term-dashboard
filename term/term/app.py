@@ -1,4 +1,4 @@
-"""Term -- Multi-AI TUI with tabs, themes, tools, and system control."""
+"""Term -- TUI con tabs, temas y control del sistema."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -126,69 +127,70 @@ AI_MODELS: dict[str, dict] = {
 
 EFFORT_LEVELS = ["low", "medium", "high", "max"]
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 # ---------------------------------------------------------------------------
 # System prompt for macOS control
 # ---------------------------------------------------------------------------
 
 SYSTEM_CONTEXT = (
-    "You are Term, a terminal AI assistant. You can control this macOS computer.\n"
-    "When the user asks you to open apps, change songs, adjust volume, etc., use osascript/AppleScript.\n\n"
-    "Examples:\n"
-    "- Open Safari: osascript -e 'tell application \"Safari\" to activate'\n"
-    "- Play/pause Spotify: osascript -e 'tell application \"Spotify\" to playpause'\n"
-    "- Next song: osascript -e 'tell application \"Spotify\" to next track'\n"
-    "- Previous song: osascript -e 'tell application \"Spotify\" to previous track'\n"
-    "- Set volume: osascript -e 'set volume output volume 50'\n"
-    "- Open Finder: open ~/Desktop\n"
-    "- Open any app: open -a \"App Name\"\n"
-    "- Get current song: osascript -e 'tell application \"Spotify\" to name of current track'\n\n"
-    "You have full shell access. Execute commands directly. Be concise."
+    "Eres Term, un asistente de terminal con IA. Puedes controlar esta Mac.\n"
+    "Cuando el usuario pida abrir apps, cambiar canciones, ajustar volumen, etc., usa osascript/AppleScript.\n\n"
+    "Ejemplos:\n"
+    "- Abrir Safari: osascript -e 'tell application \"Safari\" to activate'\n"
+    "- Play/pausa Spotify: osascript -e 'tell application \"Spotify\" to playpause'\n"
+    "- Siguiente cancion: osascript -e 'tell application \"Spotify\" to next track'\n"
+    "- Cancion anterior: osascript -e 'tell application \"Spotify\" to previous track'\n"
+    "- Ajustar volumen: osascript -e 'set volume output volume 50'\n"
+    "- Abrir Finder: open ~/Desktop\n"
+    "- Abrir app: open -a \"App Name\"\n"
+    "- Cancion actual: osascript -e 'tell application \"Spotify\" to name of current track'\n\n"
+    "Tienes acceso completo al shell. Ejecuta comandos directamente. Se conciso."
 )
 
 # ---------------------------------------------------------------------------
-# Command reference
+# Command reference (Spanish)
 # ---------------------------------------------------------------------------
 
 COMMANDS_HELP: dict[str, str] = {
-    "/theme <name>":          "Switch theme (neon, dracula, monokai, catppuccin, gruvbox, tokyo)",
-    "/effort <level>":        "Set effort (low, medium, high, max)",
-    "/model <name>":          "Switch model (claude, claude-opus, claude-haiku)",
-    "/name <text>":           "Rename the active tab",
-    "/workdir <path>":        "Change working directory",
-    "/new [name] [model]":    "New tab (e.g. /new MiChat claude-opus)",
-    "/close":                 "Close active tab",
-    "/clear":                 "Clear chat",
-    "/save":                  "Save config to disk",
-    "/help":                  "Open the help panel",
-    "/apps":                  "Open the apps panel",
-    "/tools":                 "Open the tools panel",
-    "/settings":              "Open the settings panel",
-    "/about":                 "About Term",
-    "/models":                "List models with connection status",
-    "/themes":                "List themes with active marker",
-    "/status":                "Show current status (theme, model, effort, workdir)",
-    "/reset":                 "Reset estimated context to 0",
-    "/version":               "Show Term version",
-    "/open <app>":            "Open an application (e.g. /open Safari)",
-    "/run <cmd>":             "Run a shell command and show output",
-    "/volume <0-100>":        "Set system volume",
-    "/play":                  "Play/pause Spotify",
-    "/next":                  "Next Spotify track",
-    "/prev":                  "Previous Spotify track",
-    "/copy":                  "Copy last AI response to clipboard",
-    "/history":               "Show message count for this tab",
-    "/export":                "Save chat to a text file",
-    "/compact":               "Hint: summarise long chats to save context",
+    "/theme <nombre>":        "Cambiar tema (neon, dracula, monokai, catppuccin, gruvbox, tokyo)",
+    "/effort <nivel>":        "Nivel de esfuerzo (low, medium, high, max)",
+    "/model <nombre>":        "Cambiar modelo (claude, claude-opus, claude-haiku)",
+    "/name <texto>":          "Renombrar la tab activa",
+    "/workdir <ruta>":        "Cambiar directorio de trabajo",
+    "/new [nombre] [modelo]": "Nueva tab (ej. /new MiChat claude-opus)",
+    "/close":                 "Cerrar tab activa",
+    "/clear":                 "Limpiar chat",
+    "/save":                  "Guardar configuracion",
+    "/help":                  "Panel de ayuda",
+    "/apps":                  "Panel de aplicaciones",
+    "/tools":                 "Panel de herramientas",
+    "/settings":              "Panel de ajustes",
+    "/about":                 "Acerca de Term",
+    "/models":                "Listar modelos con estado de conexion",
+    "/themes":                "Listar temas con el activo marcado",
+    "/status":                "Estado actual (tema, modelo, esfuerzo, directorio)",
+    "/reset":                 "Reiniciar contexto estimado a 0",
+    "/version":               "Mostrar version de Term",
+    "/open <app>":            "Abrir una aplicacion (ej. /open Safari)",
+    "/run <cmd>":             "Ejecutar comando shell y mostrar salida",
+    "/volume <0-100>":        "Ajustar volumen del sistema",
+    "/play":                  "Play/Pausa en Spotify",
+    "/next":                  "Siguiente cancion en Spotify",
+    "/prev":                  "Cancion anterior en Spotify",
+    "/copy":                  "Copiar ultima respuesta al portapapeles",
+    "/history":               "Cantidad de mensajes en esta tab",
+    "/export":                "Guardar chat en archivo de texto",
+    "/compact":               "Consejo: resumir chats largos para ahorrar contexto",
+    "/restart":               "Cerrar y reiniciar Term",
 }
 
 SHORTCUTS_HELP: dict[str, str] = {
-    "ctrl+t": "New tab",
-    "ctrl+w": "Close tab",
-    "ctrl+l": "Clear chat",
-    "ctrl+e": "Cycle effort",
-    "escape":  "Cancel generation",
+    "ctrl+t": "Nueva tab",
+    "ctrl+w": "Cerrar tab",
+    "ctrl+l": "Limpiar chat",
+    "ctrl+e": "Cambiar esfuerzo",
+    "escape":  "Cancelar generacion",
 }
 
 # ---------------------------------------------------------------------------
@@ -236,7 +238,7 @@ def _detect_apps() -> list[dict]:
         ("docker", "Docker", "Dev"),
         ("lazygit", "LazyGit", "Dev"),
         ("tmux", "tmux", "Terminal"),
-        ("mc", "Midnight Commander", "Files"),
+        ("mc", "Midnight Commander", "Archivos"),
     ]
     return [
         {"cmd": cmd, "name": name, "category": cat}
@@ -475,7 +477,7 @@ Footer {
 
 
 class UserMessage(Static):
-    """A single user message bubble."""
+    """Un mensaje del usuario."""
 
     def __init__(self, text: str) -> None:
         super().__init__(text)
@@ -483,7 +485,7 @@ class UserMessage(Static):
 
 
 class AssistantMessage(Vertical):
-    """Streaming assistant response -- wraps a Markdown widget."""
+    """Respuesta del asistente con streaming -- envuelve un Markdown."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -506,7 +508,7 @@ class AssistantMessage(Vertical):
 
 
 class ChatTab(Vertical):
-    """A full chat interface: scrollable messages + input bar."""
+    """Interfaz de chat completa: mensajes scrolleables + barra de entrada."""
 
     def __init__(
         self,
@@ -533,14 +535,14 @@ class ChatTab(Vertical):
             with VerticalScroll(classes="messages", id=f"msgs-{self.tab_id}"):
                 yield Static(
                     logo + "\n\n"
-                    f"[dim]{model['name']} | Type a message or /help for commands[/]",
+                    f"[dim]{model['name']} | Escribe un mensaje o /help para comandos[/]",
                     classes="info-block",
                     id=f"empty-{self.tab_id}",
                 )
-            yield Label(" Processing...", classes="loading", id=f"load-{self.tab_id}")
+            yield Label(" Procesando...", classes="loading", id=f"load-{self.tab_id}")
             with Horizontal(classes="input-bar"):
                 yield Input(
-                    placeholder="Message or /command...",
+                    placeholder="Mensaje o /comando...",
                     id=f"input-{self.tab_id}",
                 )
 
@@ -554,12 +556,12 @@ class TermApp(App):
     CSS = APP_CSS
 
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit"),
-        Binding("ctrl+l", "clear_tab", "Clear"),
-        Binding("ctrl+t", "new_tab", "New tab"),
-        Binding("ctrl+w", "close_tab", "Close tab"),
-        Binding("ctrl+e", "cycle_effort", "Effort"),
-        Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+c", "quit", "Salir"),
+        Binding("ctrl+l", "clear_tab", "Limpiar"),
+        Binding("ctrl+t", "new_tab", "Nueva tab"),
+        Binding("ctrl+w", "close_tab", "Cerrar tab"),
+        Binding("ctrl+e", "cycle_effort", "Esfuerzo"),
+        Binding("escape", "cancel", "Cancelar"),
     ]
 
     theme_key: reactive[str] = reactive("neon")
@@ -691,10 +693,10 @@ class TermApp(App):
             with Vertical(id="nav"):
                 yield Label("[bold]TERM[/]", id="nav-title")
                 yield Button("Chat", classes="nav-btn -active", id="nav-chat")
-                yield Button("Settings", classes="nav-btn", id="nav-settings")
+                yield Button("Ajustes", classes="nav-btn", id="nav-settings")
                 yield Button("Apps", classes="nav-btn", id="nav-apps")
-                yield Button("Tools", classes="nav-btn", id="nav-tools")
-                yield Button("Help", classes="nav-btn", id="nav-help")
+                yield Button("Herramientas", classes="nav-btn", id="nav-tools")
+                yield Button("Ayuda", classes="nav-btn", id="nav-help")
             with Vertical(id="main"):
                 with TabbedContent(id="main-tabs"):
                     tab_id = self._next_tab_id()
@@ -718,50 +720,67 @@ class TermApp(App):
 
     # ------------------------------------------------------------ lifecycle
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self._refresh_status()
         if not self._permissions_granted:
-            self._show_permissions_dialog()
-        try:
-            first = next(iter(self._tabs.values()))
-            self.query_one(f"#input-{first.tab_id}", Input).focus()
-        except (NoMatches, StopIteration):
-            pass
+            # Schedule permissions dialog after mount completes
+            self.set_timer(0.1, self._show_permissions_dialog_deferred)
+        else:
+            try:
+                first = next(iter(self._tabs.values()))
+                self.query_one(f"#input-{first.tab_id}", Input).focus()
+            except (NoMatches, StopIteration):
+                pass
 
-    def _show_permissions_dialog(self) -> None:
+    def _show_permissions_dialog_deferred(self) -> None:
+        """Schedule the async permissions dialog from a sync timer callback."""
+        self.run_worker(self._show_permissions_dialog(), exclusive=True)
+
+    async def _show_permissions_dialog(self) -> None:
         self._awaiting_permissions = True
         first_tab = next(iter(self._tabs.values()), None)
         if not first_tab:
             return
         try:
             msgs = self.query_one(f"#msgs-{first_tab.tab_id}", VerticalScroll)
-            # Remove empty state
             try:
                 self.query_one(f"#empty-{first_tab.tab_id}").remove()
             except NoMatches:
                 pass
-            self.call_after_refresh(lambda: self._mount_permissions(msgs, first_tab))
+            perm_text = (
+                "[bold]Term necesita permisos para funcionar correctamente.[/]\n\n"
+                "Al aceptar, Term podra:\n\n"
+                "  [bold]Aplicaciones[/]     Abrir y controlar apps (Safari, Spotify, etc.)\n"
+                "  [bold]Archivos[/]         Leer y escribir archivos en tu directorio de trabajo\n"
+                "  [bold]Sistema[/]          Ajustar volumen, ejecutar comandos shell\n"
+                "  [bold]Configuracion[/]    Guardar preferencias en ~/.config/term/\n"
+                "  [bold]Red[/]              Conectar con la IA via OAuth\n\n"
+                "Todos los comandos se ejecutan localmente en tu maquina.\n"
+                "Term usa tu autenticacion OAuth existente.\n\n"
+                "[bold]Aceptar permisos? (s/n)[/]"
+            )
+            await msgs.mount(Static(perm_text, classes="info-block", id="perm-dialog"))
+            msgs.scroll_end(animate=False)
         except NoMatches:
             pass
 
-    def _mount_permissions(self, msgs: VerticalScroll, tab: ChatTab) -> None:
-        perm_text = (
-            "[bold]Term necesita permisos para funcionar correctamente.[/]\n\n"
-            "Al aceptar, Term podra:\n\n"
-            "  [bold]Aplicaciones[/]     Abrir y controlar apps (Safari, Spotify, etc.)\n"
-            "  [bold]Archivos[/]         Leer y escribir archivos en tu directorio de trabajo\n"
-            "  [bold]Sistema[/]          Ajustar volumen, ejecutar comandos shell\n"
-            "  [bold]Configuracion[/]    Guardar preferencias en ~/.config/term/\n"
-            "  [bold]Red[/]              Conectar con Claude Code CLI via OAuth\n\n"
-            "Todos los comandos se ejecutan localmente en tu maquina.\n"
-            "Claude Code usa tu autenticacion OAuth existente.\n\n"
-            "[bold]Aceptar permisos? (s/n)[/]"
-        )
-        msgs.mount(Static(perm_text, classes="info-block", id="perm-dialog"))
-        msgs.scroll_end(animate=False)
+    # ------------------------------------------------------------ theme watcher
+
+    def watch_theme_key(self, value: str) -> None:
+        """Force CSS variable re-evaluation when theme changes."""
+        self._refresh_status()
+        self.call_later(self._apply_theme)
+
+    def _apply_theme(self) -> None:
+        """Re-parse stylesheet with updated CSS variables."""
         try:
-            self.query_one(f"#input-{tab.tab_id}", Input).focus()
-        except NoMatches:
+            self.stylesheet.reparse()
+        except Exception:
+            pass
+        self.refresh(layout=True)
+        try:
+            self.screen.refresh(layout=True)
+        except Exception:
             pass
 
     # ------------------------------------------------------------ helpers
@@ -777,14 +796,14 @@ class TermApp(App):
         bar = ">" * filled + "-" * (bar_len - filled)
         try:
             self.query_one("#status-effort", Label).update(
-                f"[bold]Effort:[/] {self.effort}"
+                f"[bold]Esfuerzo:[/] {self.effort}"
             )
             self.query_one("#status-context", Label).update(
-                f"[bold]Context:[/] [{bar}] {pct}% ({self._context_tokens:,}/{self._max_context:,})"
+                f"[bold]Contexto:[/] [{bar}] {pct}% ({self._context_tokens:,}/{self._max_context:,})"
             )
             model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
             self.query_one("#status-model", Label).update(
-                f"[bold]Model:[/] {model_name}"
+                f"[bold]Modelo:[/] {model_name}"
             )
             wd = self.workdir
             if len(wd) > 30:
@@ -811,6 +830,7 @@ class TermApp(App):
             "workdir": self.workdir,
             "effort": self.effort,
             "model": self.current_model,
+            "permissions_granted": self._permissions_granted,
         })
 
     def _active_tab_id(self) -> str | None:
@@ -850,19 +870,19 @@ class TermApp(App):
             theme_name = THEMES[self.theme_key]["name"]
             model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
             content = (
-                f"[bold]Settings[/]\n\n"
-                f"Theme: [bold]{theme_name}[/]\n"
-                f"  Available: {', '.join(THEMES.keys())}\n"
-                f"  Change: [bold]/theme <name>[/]\n\n"
-                f"Model: [bold]{model_name}[/]\n"
-                f"  Available: {', '.join(AI_MODELS.keys())}\n"
-                f"  Change: [bold]/model <name>[/]\n\n"
-                f"Effort: [bold]{self.effort}[/]\n"
-                f"  Levels: {', '.join(EFFORT_LEVELS)}\n"
-                f"  Change: [bold]/effort <level>[/]\n\n"
-                f"Workdir: [bold]{self.workdir}[/]\n"
-                f"  Change: [bold]/workdir <path>[/]\n\n"
-                f"[bold]/save[/] to persist settings to disk"
+                f"[bold]Ajustes[/]\n\n"
+                f"Tema: [bold]{theme_name}[/]\n"
+                f"  Disponibles: {', '.join(THEMES.keys())}\n"
+                f"  Cambiar: [bold]/theme <nombre>[/]\n\n"
+                f"Modelo: [bold]{model_name}[/]\n"
+                f"  Disponibles: {', '.join(AI_MODELS.keys())}\n"
+                f"  Cambiar: [bold]/model <nombre>[/]\n\n"
+                f"Esfuerzo: [bold]{self.effort}[/]\n"
+                f"  Niveles: {', '.join(EFFORT_LEVELS)}\n"
+                f"  Cambiar: [bold]/effort <nivel>[/]\n\n"
+                f"Directorio: [bold]{self.workdir}[/]\n"
+                f"  Cambiar: [bold]/workdir <ruta>[/]\n\n"
+                f"[bold]/save[/] para guardar ajustes en disco"
             )
             await pane.mount(Static(content, classes="panel"))
 
@@ -870,27 +890,27 @@ class TermApp(App):
             cats: dict[str, list[dict]] = {}
             for app in self._apps:
                 cats.setdefault(app["category"], []).append(app)
-            lines = ["[bold]Installed CLI Applications[/]\n"]
+            lines = ["[bold]Aplicaciones CLI instaladas[/]\n"]
             for cat, items in cats.items():
                 lines.append(f"\n[bold]{cat}[/]")
                 for it in items:
                     lines.append(f"  {it['name']} [dim]({it['cmd']})[/]")
             lines.append(
-                "\n[dim]You can also ask in chat: 'open Safari', "
-                "'play music in Spotify', etc.[/]"
+                "\n[dim]Tambien puedes pedir en el chat: 'abrir Safari', "
+                "'pon musica en Spotify', etc.[/]"
             )
             await pane.mount(Static("\n".join(lines), classes="panel"))
 
         elif panel == "tools":
             checks = [
-                ("Claude CLI", "claude", "Primary AI"),
-                ("Git", "git", "Version control"),
-                ("Node.js", "node", "JS runtime"),
-                ("Python", "python3", "Python runtime"),
-                ("Docker", "docker", "Containers"),
-                ("osascript", "osascript", "macOS system control"),
+                ("Claude CLI", "claude", "IA principal"),
+                ("Git", "git", "Control de versiones"),
+                ("Node.js", "node", "Runtime JS"),
+                ("Python", "python3", "Runtime Python"),
+                ("Docker", "docker", "Contenedores"),
+                ("osascript", "osascript", "Control del sistema macOS"),
             ]
-            lines = ["[bold]Connected Tools[/]\n"]
+            lines = ["[bold]Herramientas conectadas[/]\n"]
             for name, cmd, desc in checks:
                 found = shutil.which(cmd) is not None
                 marker = "[green bold]OK[/]" if found else "[red]NO[/]"
@@ -901,37 +921,37 @@ class TermApp(App):
             models_info = []
             for k, m in AI_MODELS.items():
                 connected = shutil.which(m["cmd"][0]) is not None
-                status = "[green]connected[/]" if connected else "[red]disconnected[/]"
+                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
                 models_info.append(f"  [bold]{m['name']}[/] ({k}) {status}")
 
             lines = [
                 _build_logo(self.theme_key),
                 "",
-                "[bold]Term[/] -- Multi-AI TUI dashboard",
+                "[bold]Term[/] -- TUI con IA",
                 "",
-                "[bold]What is Term?[/]",
-                "  A TUI that connects to Claude Code via OAuth CLI.",
-                "  Chat, control your Mac, open apps, change music,",
-                "  and more -- all from your terminal.",
+                "[bold]Que es Term?[/]",
+                "  Una TUI que conecta con modelos de IA via OAuth CLI.",
+                "  Chatea, controla tu Mac, abre apps, cambia musica,",
+                "  y mas -- todo desde tu terminal.",
                 "",
-                "[bold]Available models:[/]",
+                "[bold]Modelos disponibles:[/]",
                 *models_info,
                 "",
-                "[bold]Commands:[/]",
+                "[bold]Comandos:[/]",
             ]
             for cmd, desc in COMMANDS_HELP.items():
                 lines.append(f"  [bold]{cmd:28s}[/] {desc}")
             lines.append("")
-            lines.append("[bold]Keyboard shortcuts:[/]")
+            lines.append("[bold]Atajos de teclado:[/]")
             for key, desc in SHORTCUTS_HELP.items():
                 lines.append(f"  [bold]{key:28s}[/] {desc}")
             lines.extend([
                 "",
-                "[bold]System control examples:[/]",
-                "  'open Safari'",
-                "  'next song in Spotify'",
-                "  'set volume to 50'",
-                "  'open the terminal'",
+                "[bold]Ejemplos de control del sistema:[/]",
+                "  'abrir Safari'",
+                "  'siguiente cancion en Spotify'",
+                "  'pon el volumen a 50'",
+                "  'abre la terminal'",
                 "",
                 f"[dim]Config: {CONFIG_PATH}[/]",
             ])
@@ -962,7 +982,8 @@ class TermApp(App):
         if not iid.startswith("input-chat"):
             return
 
-        text = event.value.strip()
+        raw = event.value
+        text = raw.strip()
         if not text:
             return
 
@@ -990,7 +1011,7 @@ class TermApp(App):
                         model = AI_MODELS.get(first_tab.model_key, AI_MODELS["claude"])
                         await msgs.mount(Static(
                             logo + "\n\n"
-                            f"[dim]{model['name']} | Type a message or /help for commands[/]",
+                            f"[dim]{model['name']} | Escribe un mensaje o /help para comandos[/]",
                             classes="info-block",
                         ))
                     except NoMatches:
@@ -1014,7 +1035,7 @@ class TermApp(App):
             elif text in AI_MODELS:
                 selected = text
             else:
-                self.notify(f"Invalid model: {text}", timeout=2)
+                self.notify(f"Modelo invalido: {text}", timeout=2)
                 return
             await self._create_tab(self._pending_new_tab_name, selected)
             self._pending_new_tab_name = None
@@ -1028,9 +1049,8 @@ class TermApp(App):
 
         # Bare "/" shows command list
         if text == "/":
-            slash_cmds = {k: v for k, v in COMMANDS_HELP.items() if k.startswith("/")}
-            lines = ["[bold]Available commands:[/]\n"]
-            for c, d in slash_cmds.items():
+            lines = ["[bold]Comandos disponibles:[/]\n"]
+            for c, d in COMMANDS_HELP.items():
                 lines.append(f"  [bold]{c:28s}[/] {d}")
             try:
                 msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
@@ -1082,18 +1102,17 @@ class TermApp(App):
         if cmd == "/theme":
             if arg in THEMES:
                 self.theme_key = arg
-                self.mutate_reactive(TermApp.theme_key)
-                self.notify(f"Theme: {THEMES[arg]['name']}", timeout=1)
+                self.notify(f"Tema: {THEMES[arg]['name']}", timeout=1)
             else:
-                self.notify(f"Themes: {', '.join(THEMES.keys())}", timeout=3)
+                self.notify(f"Temas: {', '.join(THEMES.keys())}", timeout=3)
 
         elif cmd == "/effort":
             if arg in EFFORT_LEVELS:
                 self.effort = arg
                 self._refresh_status()
-                self.notify(f"Effort: {arg}", timeout=1)
+                self.notify(f"Esfuerzo: {arg}", timeout=1)
             else:
-                self.notify(f"Levels: {', '.join(EFFORT_LEVELS)}", timeout=2)
+                self.notify(f"Niveles: {', '.join(EFFORT_LEVELS)}", timeout=2)
 
         elif cmd == "/model":
             if arg in AI_MODELS:
@@ -1102,9 +1121,9 @@ class TermApp(App):
                 if chat:
                     chat.model_key = arg
                 self._refresh_status()
-                self.notify(f"Model: {AI_MODELS[arg]['name']}", timeout=1)
+                self.notify(f"Modelo: {AI_MODELS[arg]['name']}", timeout=1)
             else:
-                self.notify(f"Models: {', '.join(AI_MODELS.keys())}", timeout=2)
+                self.notify(f"Modelos: {', '.join(AI_MODELS.keys())}", timeout=2)
 
         elif cmd == "/name":
             if arg:
@@ -1126,7 +1145,7 @@ class TermApp(App):
                     self._refresh_status()
                     self.notify(f"Dir: {expanded}", timeout=1)
                 else:
-                    self.notify(f"Not found: {arg}", timeout=2)
+                    self.notify(f"No encontrado: {arg}", timeout=2)
 
         elif cmd == "/new":
             tokens = arg.split() if arg else []
@@ -1146,17 +1165,17 @@ class TermApp(App):
                 items = []
                 for i, (k, m) in enumerate(AI_MODELS.items(), 1):
                     connected = shutil.which(m["cmd"][0]) is not None
-                    status = "[green]connected[/]" if connected else "[red]disconnected[/]"
+                    status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
                     items.append(
                         f"  [bold]{i}[/]) [bold]{m['name']}[/] ({k}) {status}"
                     )
                 try:
                     msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
                     await msgs.mount(Static(
-                        "[bold]Select model for the new tab:[/]\n\n"
+                        "[bold]Selecciona modelo para la nueva tab:[/]\n\n"
                         + "\n".join(items)
-                        + f"\n\n[dim]Type the number (1-{len(AI_MODELS)}) "
-                        "or the model name[/]",
+                        + f"\n\n[dim]Escribe el numero (1-{len(AI_MODELS)}) "
+                        "o el nombre del modelo[/]",
                         classes="info-block",
                         id="model-selector",
                     ))
@@ -1173,7 +1192,7 @@ class TermApp(App):
 
         elif cmd == "/save":
             self._persist_config()
-            self.notify("Config saved", timeout=2)
+            self.notify("Configuracion guardada", timeout=2)
 
         elif cmd == "/help":
             self._show_panel_sync("help")
@@ -1188,14 +1207,14 @@ class TermApp(App):
             self._show_panel_sync("settings")
 
         elif cmd == "/about":
-            self.notify(f"Term v{VERSION} -- Multi-AI TUI dashboard", timeout=3)
+            self.notify(f"Term v{VERSION}", timeout=3)
 
         elif cmd == "/models":
-            lines = ["[bold]Available models:[/]\n"]
+            lines = ["[bold]Modelos disponibles:[/]\n"]
             for i, (k, m) in enumerate(AI_MODELS.items(), 1):
                 connected = shutil.which(m["cmd"][0]) is not None
-                status = "[green]connected[/]" if connected else "[red]disconnected[/]"
-                current = " [bold cyan]<< active[/]" if k == self.current_model else ""
+                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                current = " [bold cyan]<< activo[/]" if k == self.current_model else ""
                 lines.append(
                     f"  {i}) [bold]{m['name']}[/] ({k}) {status}{current}"
                 )
@@ -1207,9 +1226,9 @@ class TermApp(App):
                 pass
 
         elif cmd == "/themes":
-            lines = ["[bold]Available themes:[/]\n"]
+            lines = ["[bold]Temas disponibles:[/]\n"]
             for k, t in THEMES.items():
-                current = " [bold cyan]<< active[/]" if k == self.theme_key else ""
+                current = " [bold cyan]<< activo[/]" if k == self.theme_key else ""
                 lines.append(f"  [bold]{t['name']}[/] ({k}){current}")
             try:
                 msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
@@ -1220,9 +1239,9 @@ class TermApp(App):
 
         elif cmd == "/status":
             self.notify(
-                f"Theme: {THEMES[self.theme_key]['name']} | "
-                f"Model: {AI_MODELS[self.current_model]['name']} | "
-                f"Effort: {self.effort} | "
+                f"Tema: {THEMES[self.theme_key]['name']} | "
+                f"Modelo: {AI_MODELS[self.current_model]['name']} | "
+                f"Esfuerzo: {self.effort} | "
                 f"Dir: {self.workdir}",
                 timeout=5,
             )
@@ -1230,7 +1249,7 @@ class TermApp(App):
         elif cmd == "/reset":
             self._context_tokens = 0
             self._refresh_status()
-            self.notify("Context reset to 0", timeout=1)
+            self.notify("Contexto reiniciado a 0", timeout=1)
 
         elif cmd == "/version":
             self.notify(f"Term v{VERSION}", timeout=2)
@@ -1239,11 +1258,11 @@ class TermApp(App):
             if arg:
                 try:
                     subprocess.Popen(["open", "-a", arg])
-                    self.notify(f"Opening {arg}...", timeout=1)
+                    self.notify(f"Abriendo {arg}...", timeout=1)
                 except Exception as e:
                     self.notify(f"Error: {e}", timeout=2)
             else:
-                self.notify("Usage: /open <app name>", timeout=2)
+                self.notify("Uso: /open <nombre de app>", timeout=2)
 
         elif cmd == "/run":
             if arg:
@@ -1256,7 +1275,7 @@ class TermApp(App):
                         timeout=10,
                         cwd=self.workdir,
                     )
-                    output = result.stdout or result.stderr or "(no output)"
+                    output = result.stdout or result.stderr or "(sin salida)"
                     try:
                         msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
                         await msgs.mount(Static(
@@ -1267,11 +1286,11 @@ class TermApp(App):
                     except NoMatches:
                         pass
                 except subprocess.TimeoutExpired:
-                    self.notify("Command timed out (10s)", timeout=2)
+                    self.notify("Comando agotado (10s)", timeout=2)
                 except Exception as e:
                     self.notify(f"Error: {e}", timeout=2)
             else:
-                self.notify("Usage: /run <command>", timeout=2)
+                self.notify("Uso: /run <comando>", timeout=2)
 
         elif cmd == "/volume":
             if arg and arg.isdigit() and 0 <= int(arg) <= 100:
@@ -1279,30 +1298,30 @@ class TermApp(App):
                     ["osascript", "-e", f"set volume output volume {arg}"],
                     capture_output=True,
                 )
-                self.notify(f"Volume: {arg}%", timeout=1)
+                self.notify(f"Volumen: {arg}%", timeout=1)
             else:
-                self.notify("Usage: /volume <0-100>", timeout=2)
+                self.notify("Uso: /volume <0-100>", timeout=2)
 
         elif cmd == "/play":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to playpause'],
                 capture_output=True,
             )
-            self.notify("Play/Pause", timeout=1)
+            self.notify("Play/Pausa", timeout=1)
 
         elif cmd == "/next":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to next track'],
                 capture_output=True,
             )
-            self.notify("Next track", timeout=1)
+            self.notify("Siguiente cancion", timeout=1)
 
         elif cmd == "/prev":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to previous track'],
                 capture_output=True,
             )
-            self.notify("Previous track", timeout=1)
+            self.notify("Cancion anterior", timeout=1)
 
         elif cmd == "/copy":
             chat = self._tabs.get(tab_id)
@@ -1313,16 +1332,16 @@ class TermApp(App):
                         input=chat.last_response.encode(),
                         check=True,
                     )
-                    self.notify("Copied to clipboard", timeout=1)
+                    self.notify("Copiado al portapapeles", timeout=1)
                 except Exception as e:
-                    self.notify(f"Copy failed: {e}", timeout=2)
+                    self.notify(f"Error al copiar: {e}", timeout=2)
             else:
-                self.notify("No response to copy", timeout=2)
+                self.notify("No hay respuesta para copiar", timeout=2)
 
         elif cmd == "/history":
             chat = self._tabs.get(tab_id)
             count = chat.message_count if chat else 0
-            self.notify(f"Messages in this tab: {count}", timeout=2)
+            self.notify(f"Mensajes en esta tab: {count}", timeout=2)
 
         elif cmd == "/export":
             chat = self._tabs.get(tab_id)
@@ -1336,27 +1355,31 @@ class TermApp(App):
                     texts = []
                     for child in msgs_area.children:
                         if isinstance(child, UserMessage):
-                            texts.append(f"[User] {child.renderable}")
+                            texts.append(f"[Usuario] {child.renderable}")
                         elif isinstance(child, AssistantMessage):
-                            texts.append(f"[Assistant] {child._text}")
+                            texts.append(f"[Asistente] {child._text}")
                         elif isinstance(child, Static):
                             texts.append(str(child.renderable))
                     path.write_text("\n\n".join(texts))
-                    self.notify(f"Exported to {path}", timeout=3)
+                    self.notify(f"Exportado a {path}", timeout=3)
                 except Exception as e:
-                    self.notify(f"Export failed: {e}", timeout=2)
+                    self.notify(f"Error al exportar: {e}", timeout=2)
             else:
-                self.notify("No active chat", timeout=2)
+                self.notify("No hay chat activo", timeout=2)
 
         elif cmd == "/compact":
             self.notify(
-                "Tip: long conversations use more context. "
-                "Use /clear to start fresh, or /reset to zero the counter.",
+                "Consejo: conversaciones largas usan mas contexto. "
+                "Usa /clear para empezar de nuevo, o /reset para reiniciar el contador.",
                 timeout=5,
             )
 
+        elif cmd == "/restart":
+            self.exit()
+            os.execv(sys.executable, [sys.executable, "-m", "term.app"])
+
         else:
-            self.notify(f"Unknown command: {cmd}. Try /help", timeout=2)
+            self.notify(f"Comando desconocido: {cmd}. Prueba /help", timeout=2)
 
     # ------------------------------------------------------------ tab management
 
@@ -1387,7 +1410,7 @@ class TermApp(App):
 
     async def action_close_tab(self) -> None:
         if len(self._tabs) <= 1:
-            self.notify("Cannot close the last tab", timeout=1)
+            self.notify("No se puede cerrar la ultima tab", timeout=1)
             return
         tc = self.query_one("#main-tabs", TabbedContent)
         active = tc.active
@@ -1444,7 +1467,7 @@ class TermApp(App):
         idx = EFFORT_LEVELS.index(self.effort) if self.effort in EFFORT_LEVELS else 2
         self.effort = EFFORT_LEVELS[(idx + 1) % len(EFFORT_LEVELS)]
         self._refresh_status()
-        self.notify(f"Effort: {self.effort}", timeout=1)
+        self.notify(f"Esfuerzo: {self.effort}", timeout=1)
 
     # ------------------------------------------------------------ AI execution
 
@@ -1491,9 +1514,9 @@ class TermApp(App):
 
         except FileNotFoundError:
             full_output = (
-                "Error: `claude` not found.\n\n"
-                "Install: `npm install -g @anthropic-ai/claude-code`\n"
-                "Auth: `claude auth login`"
+                "Error: `claude` no encontrado.\n\n"
+                "Instalar: `npm install -g @anthropic-ai/claude-code`\n"
+                "Autenticar: `claude auth login`"
             )
             if chat.assistant_widget is not None:
                 await chat.assistant_widget.stream(full_output)
@@ -1524,11 +1547,11 @@ class TermApp(App):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="term", description="Term -- Multi-AI TUI Dashboard",
+        prog="term", description="Term -- TUI con IA",
     )
-    parser.add_argument("--workdir", "-w", default="", help="Working directory")
+    parser.add_argument("--workdir", "-w", default="", help="Directorio de trabajo")
     parser.add_argument(
-        "--theme", "-t", default="", choices=list(THEMES.keys()), help="Theme",
+        "--theme", "-t", default="", choices=list(THEMES.keys()), help="Tema",
     )
     args = parser.parse_args()
     TermApp(workdir=args.workdir, theme=args.theme).run()
