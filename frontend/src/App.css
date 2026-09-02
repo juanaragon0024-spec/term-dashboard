@@ -596,3 +596,33 @@ body {
   font-weight: 700;
   margin-right: 4px;
 }
+
+/* Help models */
+.help-models {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.help-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.7rem;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+.model-status {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  min-width: 28px;
+  text-align: center;
+}
+.model-status.connected { color: var(--accent3); border: 1px solid var(--accent3); }
+.model-status.disconnected { color: var(--text-muted); border: 1px solid var(--border); }
+.model-name { color: var(--text-primary); font-weight: 600; }
+.model-key { color: var(--text-muted); }

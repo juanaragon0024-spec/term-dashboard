@@ -1,29 +1,35 @@
+const MODELS = [
+  { key: 'claude', name: 'Claude (OAuth)', connected: true },
+  { key: 'claude-opus', name: 'Claude Opus', connected: true },
+  { key: 'claude-haiku', name: 'Claude Haiku', connected: true },
+]
+
+const COMMANDS = [
+  { cmd: '/theme <name>', desc: 'Cambiar tema (neon, dracula, monokai, catppuccin, gruvbox, tokyo)' },
+  { cmd: '/effort <level>', desc: 'Cambiar esfuerzo (low, medium, high, max)' },
+  { cmd: '/model <name>', desc: 'Cambiar modelo (claude, claude-opus, claude-haiku)' },
+  { cmd: '/name <texto>', desc: 'Renombrar la pestana activa' },
+  { cmd: '/workdir <ruta>', desc: 'Cambiar directorio de trabajo' },
+  { cmd: '/new [nombre] [modelo]', desc: 'Nueva pestana -- si omites modelo, sale selector' },
+  { cmd: '/close', desc: 'Cerrar pestana activa' },
+  { cmd: '/clear', desc: 'Limpiar chat' },
+  { cmd: '/save', desc: 'Guardar configuracion' },
+  { cmd: '/help', desc: 'Mostrar esta ayuda' },
+  { cmd: '/apps', desc: 'Ir al panel de apps' },
+  { cmd: '/tools', desc: 'Ir al panel de herramientas' },
+  { cmd: '/settings', desc: 'Ir al panel de configuracion' },
+  { cmd: '/about', desc: 'Info sobre Term' },
+]
+
+const SHORTCUTS = [
+  { key: 'ctrl+t', desc: 'Nueva tab' },
+  { key: 'ctrl+w', desc: 'Cerrar tab' },
+  { key: 'ctrl+l', desc: 'Limpiar chat' },
+  { key: 'ctrl+e', desc: 'Ciclar effort' },
+  { key: 'escape', desc: 'Cancelar generacion' },
+]
+
 export function HelpPanel() {
-  const commands = [
-    { cmd: '/theme <name>', desc: 'Cambiar tema (neon, dracula, monokai, catppuccin, gruvbox, tokyo)' },
-    { cmd: '/effort <level>', desc: 'Cambiar esfuerzo (low, medium, high, max)' },
-    { cmd: '/model <name>', desc: 'Cambiar modelo (claude, claude-opus, claude-haiku)' },
-    { cmd: '/name <texto>', desc: 'Renombrar la pestana activa' },
-    { cmd: '/workdir <ruta>', desc: 'Cambiar directorio de trabajo' },
-    { cmd: '/new [nombre] [modelo]', desc: 'Nueva pestana (ej: /new MiChat claude-opus)' },
-    { cmd: '/close', desc: 'Cerrar pestana activa' },
-    { cmd: '/clear', desc: 'Limpiar chat' },
-    { cmd: '/save', desc: 'Guardar configuracion' },
-    { cmd: '/help', desc: 'Mostrar esta ayuda' },
-    { cmd: '/apps', desc: 'Ir al panel de apps' },
-    { cmd: '/tools', desc: 'Ir al panel de herramientas' },
-    { cmd: '/settings', desc: 'Ir al panel de configuracion' },
-    { cmd: '/about', desc: 'Info sobre Term' },
-  ]
-
-  const shortcuts = [
-    { key: 'ctrl+t', desc: 'Nueva tab' },
-    { key: 'ctrl+w', desc: 'Cerrar tab' },
-    { key: 'ctrl+l', desc: 'Limpiar chat' },
-    { key: 'ctrl+e', desc: 'Ciclar effort' },
-    { key: 'escape', desc: 'Cancelar generacion' },
-  ]
-
   return (
     <div className="help-panel">
       <div className="ascii-logo">
@@ -41,9 +47,22 @@ export function HelpPanel() {
         Puedes chatear, controlar tu Mac (abrir apps, cambiar musica, ajustar volumen), y mas.
       </p>
 
+      <h3 className="help-subtitle">Modelos disponibles</h3>
+      <div className="help-models">
+        {MODELS.map((m) => (
+          <div key={m.key} className="help-model-row">
+            <span className={`model-status ${m.connected ? 'connected' : 'disconnected'}`}>
+              {m.connected ? 'OK' : 'NO'}
+            </span>
+            <span className="model-name">{m.name}</span>
+            <span className="model-key">{m.key}</span>
+          </div>
+        ))}
+      </div>
+
       <h3 className="help-subtitle">Comandos disponibles</h3>
       <div className="help-commands">
-        {commands.map((c) => (
+        {COMMANDS.map((c) => (
           <div key={c.cmd} className="help-cmd-row">
             <span className="help-cmd-name">{c.cmd}</span>
             <span className="help-cmd-desc">{c.desc}</span>
@@ -53,7 +72,7 @@ export function HelpPanel() {
 
       <h3 className="help-subtitle">Atajos de teclado (terminal)</h3>
       <div className="help-shortcuts">
-        {shortcuts.map((s) => (
+        {SHORTCUTS.map((s) => (
           <div key={s.key} className="shortcut">
             <span className="key">{s.key}</span> {s.desc}
           </div>

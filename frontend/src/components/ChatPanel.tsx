@@ -67,7 +67,7 @@ export function ChatPanel({ tab, onSend, onStop, onClear, theme }: ChatPanelProp
               }}>{LOGO}</pre>
             </div>
             <div className="empty-state-sub">
-              Escribe un mensaje para interactuar con {tab.modelName}.
+              Escribe un mensaje o /help para ver comandos.
             </div>
           </div>
         )}

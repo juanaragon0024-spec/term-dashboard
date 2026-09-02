@@ -537,14 +537,96 @@ class TermApp(App):
         self._active_panel = "chat"
         self._context_tokens = 0
         self._max_context = 200000
+        self._awaiting_model_selection: str | None = None
+        self._pending_new_tab_name: str | None = None
 
     def get_css_variables(self) -> dict[str, str]:
         t = THEMES.get(self.theme_key, THEMES["neon"])
         return {
+            # Textual core variables
+            "background": t["bg1"],
+            "foreground": t["text"],
+            "panel": t["bg2"],
+            "surface": t["bg2"],
+            "primary": t["accent1"],
+            "secondary": t["accent2"],
+            "accent": t["accent3"],
+            "warning": t["accent4"],
+            "error": t["accent2"],
+            "success": t["accent3"],
+            "boost": t["bg3"],
+            "border": t["border"],
+            # Screen selection
+            "screen-selection-background": t["accent1"],
+            "screen-selection-foreground": t["bg1"],
+            # Input
+            "input-cursor-background": t["accent1"],
+            "input-cursor-foreground": t["bg1"],
+            "input-cursor-text-style": "bold",
+            "input-selection-background": t["accent1"],
+            "input-selection-foreground": t["bg1"],
+            # Block cursor
+            "block-cursor-background": t["accent1"],
+            "block-cursor-foreground": t["bg1"],
+            "block-cursor-text-style": "bold",
+            "block-cursor-blurred-background": t["muted"],
+            "block-cursor-blurred-foreground": t["text"],
+            "block-cursor-blurred-text-style": "none",
+            "block-hover-background": t["bg3"],
+            # Scrollbar
+            "scrollbar": t["border"],
+            "scrollbar-hover": t["accent1"],
+            "scrollbar-active": t["accent1"],
+            "scrollbar-background": t["bg1"],
+            "scrollbar-background-hover": t["bg1"],
+            "scrollbar-background-active": t["bg1"],
+            "scrollbar-corner-color": t["bg1"],
+            # Footer
+            "footer-background": t["bg2"],
+            "footer-foreground": t["muted"],
+            "footer-key-background": t["bg3"],
+            "footer-key-foreground": t["accent1"],
+            "footer-description-background": t["bg2"],
+            "footer-description-foreground": t["muted"],
+            "footer-item-background": t["bg2"],
+            # Button
+            "button-foreground": t["text"],
+            "button-color-foreground": t["text"],
+            "button-focus-text-style": "bold",
+            # Link
+            "link-background": "transparent",
+            "link-background-hover": t["bg3"],
+            "link-color": t["accent1"],
+            "link-color-hover": t["accent1"],
+            "link-style": "underline",
+            "link-style-hover": "bold underline",
+            # Text
+            "text": t["text"],
+            "text-muted": t["muted"],
+            "text-disabled": t["muted"],
+            "text-accent": t["accent1"],
+            "text-primary": t["accent1"],
+            "text-secondary": t["accent2"],
+            "text-success": t["accent3"],
+            "text-warning": t["accent4"],
+            "text-error": t["accent2"],
+            # ANSI
+            "ansi-background": t["bg1"],
+            "ansi-foreground": t["text"],
+            # Markdown
+            "markdown-h": t["accent2"],
+            # Muted variants
+            "primary-muted": t["muted"],
+            "secondary-muted": t["muted"],
+            "accent-muted": t["muted"],
+            "error-muted": t["muted"],
+            "success-muted": t["muted"],
+            "warning-muted": t["muted"],
+            # Custom
             "bg1": t["bg1"], "bg2": t["bg2"], "bg3": t["bg3"],
-            "border": t["border"], "accent1": t["accent1"], "accent2": t["accent2"],
+            "accent1": t["accent1"], "accent2": t["accent2"],
             "accent3": t["accent3"], "accent4": t["accent4"],
-            "text": t["text"], "muted": t["muted"],
+            "muted": t["muted"],
         }
 
     def compose(self) -> ComposeResult:
@@ -725,6 +807,13 @@ class TermApp(App):
             await pane.mount(Static("\n".join(lines), classes="panel"))
 
         elif panel == "help":
+            # Build models list with connection status
+            models_info = []
+            for k, m in AI_MODELS.items():
+                connected = shutil.which(m["cmd"][0]) is not None
+                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                models_info.append(f"  [bold]{m['name']}[/] ({k}) {status}")
+
             lines = [
                 build_logo(self.theme_key),
                 "",
@@ -735,10 +824,13 @@ class TermApp(App):
                 "  Puedes chatear, controlar tu Mac, abrir apps,",
                 "  cambiar musica, y mas. Todo desde la terminal.",
                 "",
+                "[bold]Modelos disponibles:[/]",
+                *models_info,
+                "",
                 "[bold]Comandos:[/]",
             ]
             for cmd, desc in COMMANDS_HELP.items():
-                lines.append(f"  [bold]{cmd:20s}[/] {desc}")
+                lines.append(f"  [bold]{cmd:28s}[/] {desc}")
             lines.extend([
                 "",
                 "[bold]Control del sistema:[/]",
@@ -786,6 +878,30 @@ class TermApp(App):
             return
 
         tab_id = input_id.replace("input-", "")
+
+        # Handle model selection for /new
+        if self._awaiting_model_selection == tab_id:
+            event.input.value = ""
+            self._awaiting_model_selection = None
+            # Remove selector
+            try:
+                self.query_one("#model-selector").remove()
+            except NoMatches:
+                pass
+            # Parse selection: number or model name
+            model_keys = list(AI_MODELS.keys())
+            selected = None
+            if text.isdigit() and 1 <= int(text) <= len(model_keys):
+                selected = model_keys[int(text) - 1]
+            elif text in AI_MODELS:
+                selected = text
+            else:
+                self.notify(f"Modelo invalido: {text}", timeout=2)
+                return
+            await self._create_tab(self._pending_new_tab_name, selected)
+            self._pending_new_tab_name = None
+            return
+
         chat = self._chat_tabs.get(tab_id)
         if chat is None or chat._is_loading:
             return
@@ -879,7 +995,7 @@ class TermApp(App):
 
         elif cmd == "/new":
             # /new [nombre] [modelo]
-            # ej: /new MiChat claude-opus
+            # Si no se pasa modelo, muestra selector
             parts2 = arg.split() if arg else []
             name = None
             model = None
@@ -890,7 +1006,29 @@ class TermApp(App):
                     name = p
                 else:
                     name += " " + p
-            await self._create_tab(name, model)
+            if model:
+                await self._create_tab(name, model)
+            else:
+                # Show model selector in chat
+                self._pending_new_tab_name = name
+                models_list = []
+                for i, (k, m) in enumerate(AI_MODELS.items(), 1):
+                    connected = shutil.which(m["cmd"][0]) is not None
+                    status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                    models_list.append(f"  [bold]{i}[/]) [bold]{m['name']}[/] ({k}) {status}")
+                try:
+                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                    await msgs.mount(Static(
+                        "[bold]Selecciona modelo para la nueva tab:[/]\n\n"
+                        + "\n".join(models_list) +
+                        "\n\n[dim]Escribe el numero (1-" + str(len(AI_MODELS)) + ") o el nombre del modelo[/]",
+                        classes="empty-state",
+                        id="model-selector",
+                    ))
+                    msgs.scroll_end(animate=False)
+                except NoMatches:
+                    pass
+                self._awaiting_model_selection = tab_id
 
         elif cmd == "/close":
             await self.action_close_tab()
