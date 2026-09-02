@@ -183,6 +183,8 @@ COMMANDS_HELP: dict[str, str] = {
     "/export":                "Guardar chat en archivo de texto",
     "/compact":               "Consejo: resumir chats largos para ahorrar contexto",
     "/restart":               "Cerrar y reiniciar Term",
+    "/browse [url]":          "Abrir URL en navegador (selector de navegadores)",
+    "/browser <nombre>":      "Establecer navegador por defecto (brave, chrome, safari)",
 }
 
 SHORTCUTS_HELP: dict[str, str] = {
@@ -218,6 +220,48 @@ def _load_config() -> dict:
 def _save_config(cfg: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+
+# ---------------------------------------------------------------------------
+# Detect installed CLI apps
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Detect installed browsers
+# ---------------------------------------------------------------------------
+
+BROWSER_MAP = {
+    "Safari": "Safari",
+    "Google Chrome": "Google Chrome",
+    "Brave Browser": "Brave Browser",
+    "Firefox": "Firefox",
+    "Microsoft Edge": "Microsoft Edge",
+    "Opera": "Opera",
+    "Arc": "Arc",
+    "Vivaldi": "Vivaldi",
+    "Zen Browser": "Zen Browser",
+}
+
+BROWSER_ALIASES = {
+    "safari": "Safari",
+    "chrome": "Google Chrome",
+    "brave": "Brave Browser",
+    "firefox": "Firefox",
+    "edge": "Microsoft Edge",
+    "opera": "Opera",
+    "arc": "Arc",
+    "vivaldi": "Vivaldi",
+    "zen": "Zen Browser",
+}
+
+
+def _detect_browsers() -> list[dict]:
+    found = []
+    apps_dir = Path("/Applications")
+    for name, app_name in BROWSER_MAP.items():
+        if (apps_dir / f"{app_name}.app").exists():
+            found.append({"name": name, "app": app_name})
+    return found
 
 # ---------------------------------------------------------------------------
 # Detect installed CLI apps
@@ -576,9 +620,13 @@ class TermApp(App):
         self._max_context = 200_000
         self._tabs: dict[str, ChatTab] = {}
         self._apps = _detect_apps()
+        self._browsers = _detect_browsers()
+        self._default_browser: str = cfg.get("default_browser", "")
         self._active_panel = "chat"
         self._awaiting_model_selection: str | None = None
         self._pending_new_tab_name: str | None = None
+        self._awaiting_browser_selection: str | None = None
+        self._pending_browse_url: str = ""
         self._awaiting_permissions = False
         super().__init__()
         cfg = _load_config()
@@ -1043,6 +1091,31 @@ class TermApp(App):
             self._pending_new_tab_name = None
             return
 
+        # Browser selection flow for /browse
+        if self._awaiting_browser_selection == tab_id:
+            event.input.value = ""
+            self._awaiting_browser_selection = None
+            try:
+                self.query_one("#browser-selector").remove()
+            except NoMatches:
+                pass
+            selected_browser = None
+            if text.isdigit() and 1 <= int(text) <= len(self._browsers):
+                selected_browser = self._browsers[int(text) - 1]["app"]
+            else:
+                for b in self._browsers:
+                    if text.lower() in b["name"].lower() or text.lower() in b["app"].lower():
+                        selected_browser = b["app"]
+                        break
+            if selected_browser:
+                url = self._pending_browse_url or "https://www.google.com"
+                subprocess.Popen(["open", "-a", selected_browser, url])
+                self.notify(f"Abriendo {selected_browser}...", timeout=1)
+            else:
+                self.notify(f"Navegador no encontrado: {text}", timeout=2)
+            self._pending_browse_url = ""
+            return
+
         chat = self._tabs.get(tab_id)
         if chat is None or chat.is_loading:
             return
@@ -1379,6 +1452,65 @@ class TermApp(App):
         elif cmd == "/restart":
             self.exit()
             os.execv(sys.executable, [sys.executable, "-m", "term.app"])
+
+        elif cmd == "/browse":
+            url = arg.strip() if arg else ""
+            if self._default_browser:
+                # Use default browser directly
+                browser_app = self._default_browser
+                open_url = url or "https://www.google.com"
+                subprocess.Popen(["open", "-a", browser_app, open_url])
+                self.notify(f"Abriendo {browser_app}...", timeout=1)
+            elif len(self._browsers) == 1:
+                # Only one browser, use it
+                open_url = url or "https://www.google.com"
+                subprocess.Popen(["open", "-a", self._browsers[0]["app"], open_url])
+                self.notify(f"Abriendo {self._browsers[0]['name']}...", timeout=1)
+            elif len(self._browsers) > 1:
+                # Show selector
+                self._pending_browse_url = url
+                items = []
+                for i, b in enumerate(self._browsers, 1):
+                    items.append(f"  [bold]{i}[/]) {b['name']}")
+                try:
+                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                    await msgs.mount(Static(
+                        "[bold]Selecciona navegador:[/]\n\n"
+                        + "\n".join(items)
+                        + f"\n\n[dim]Escribe el numero (1-{len(self._browsers)}) o el nombre[/]"
+                        + "\n[dim]Usa /browser <nombre> para establecer uno por defecto[/]",
+                        classes="info-block",
+                        id="browser-selector",
+                    ))
+                    msgs.scroll_end(animate=False)
+                except NoMatches:
+                    pass
+                self._awaiting_browser_selection = tab_id
+            else:
+                self.notify("No se encontraron navegadores instalados", timeout=2)
+
+        elif cmd == "/browser":
+            if arg:
+                alias = arg.lower().strip()
+                if alias in BROWSER_ALIASES:
+                    app_name = BROWSER_ALIASES[alias]
+                    # Verify installed
+                    if Path(f"/Applications/{app_name}.app").exists():
+                        self._default_browser = app_name
+                        cfg = _load_config()
+                        cfg["default_browser"] = app_name
+                        _save_config(cfg)
+                        self.notify(f"Navegador por defecto: {app_name}", timeout=2)
+                    else:
+                        self.notify(f"{app_name} no esta instalado", timeout=2)
+                else:
+                    aliases = ", ".join(BROWSER_ALIASES.keys())
+                    self.notify(f"Nombres validos: {aliases}", timeout=3)
+            else:
+                if self._default_browser:
+                    self.notify(f"Navegador actual: {self._default_browser}", timeout=2)
+                else:
+                    self.notify("Sin navegador por defecto. Usa /browser <nombre>", timeout=2)
 
         else:
             self.notify(f"Comando desconocido: {cmd}. Prueba /help", timeout=2)
