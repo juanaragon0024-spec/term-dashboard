@@ -127,13 +127,440 @@ AI_MODELS: dict[str, dict] = {
 
 EFFORT_LEVELS = ["low", "medium", "high", "max"]
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
+
+# ---------------------------------------------------------------------------
+# Languages
+# ---------------------------------------------------------------------------
+
+LANGUAGES = {
+    "es": "Espanol",
+    "en": "English",
+    "pt": "Portugues",
+    "fr": "Francais",
+    "de": "Deutsch",
+    "it": "Italiano",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+}
+
+# ---------------------------------------------------------------------------
+# Translations
+# ---------------------------------------------------------------------------
+
+TRANSLATIONS: dict[str, dict[str, str]] = {
+    "es": {
+        "effort_label": "Esfuerzo",
+        "context_label": "Contexto",
+        "model_label": "Modelo",
+        "dir_label": "Dir",
+        "processing": " Procesando...",
+        "placeholder": "Mensaje o /comando...",
+        "write_or_help": "Escribe un mensaje o /help para comandos",
+        "commands_available": "Comandos disponibles",
+        "theme_set": "Tema",
+        "themes_list": "Temas",
+        "effort_set": "Esfuerzo",
+        "levels": "Niveles",
+        "model_set": "Modelo",
+        "models_list": "Modelos",
+        "dir_set": "Dir",
+        "not_found": "No encontrado",
+        "save_done": "Configuracion guardada",
+        "about": "Term v{version}",
+        "models_available": "Modelos disponibles",
+        "themes_available": "Temas disponibles",
+        "active_marker": "<< activo",
+        "connected": "conectado",
+        "disconnected": "desconectado",
+        "context_reset": "Contexto reiniciado a 0",
+        "open_usage": "Uso: /open <nombre de app>",
+        "opening": "Abriendo {name}...",
+        "run_usage": "Uso: /run <comando>",
+        "no_output": "(sin salida)",
+        "cmd_timeout": "Comando agotado (10s)",
+        "volume_usage": "Uso: /volume <0-100>",
+        "volume_set": "Volumen: {val}%",
+        "play_pause": "Play/Pausa",
+        "next_track": "Siguiente cancion",
+        "prev_track": "Cancion anterior",
+        "copied": "Copiado al portapapeles",
+        "copy_error": "Error al copiar: {err}",
+        "no_response_copy": "No hay respuesta para copiar",
+        "messages_count": "Mensajes en esta tab: {count}",
+        "exported": "Exportado a {path}",
+        "export_error": "Error al exportar: {err}",
+        "no_active_chat": "No hay chat activo",
+        "compact_tip": "Consejo: conversaciones largas usan mas contexto. Usa /clear para empezar de nuevo, o /reset para reiniciar el contador.",
+        "cannot_close_last": "No se puede cerrar la ultima tab",
+        "unknown_cmd": "Comando desconocido: {cmd}. Prueba /help",
+        "select_model": "Selecciona modelo para la nueva tab",
+        "type_number": "Escribe el numero (1-{n}) o el nombre del modelo",
+        "invalid_model": "Modelo invalido: {text}",
+        "perms_title": "Term necesita permisos para funcionar correctamente.",
+        "perms_accept": "Al aceptar, Term podra:",
+        "perms_apps": "Aplicaciones     Abrir y controlar apps (Safari, Spotify, etc.)",
+        "perms_files": "Archivos         Leer y escribir archivos en tu directorio de trabajo",
+        "perms_system": "Sistema          Ajustar volumen, ejecutar comandos shell",
+        "perms_config": "Configuracion    Guardar preferencias en ~/.config/term/",
+        "perms_net": "Red              Conectar con la IA via OAuth",
+        "perms_local": "Todos los comandos se ejecutan localmente en tu maquina.",
+        "perms_oauth": "Term usa tu autenticacion OAuth existente.",
+        "perms_question": "Aceptar permisos? (s/n)",
+        "perms_granted": "Permisos concedidos",
+        "perms_denied": "Permisos denegados -- funciones de sistema desactivadas",
+        "select_browser": "Selecciona navegador",
+        "type_browser_number": "Escribe el numero (1-{n}) o el nombre",
+        "set_default_browser": "Usa /browser <nombre> para establecer uno por defecto",
+        "browser_not_found": "Navegador no encontrado: {text}",
+        "no_browsers": "No se encontraron navegadores instalados",
+        "default_browser_set": "Navegador por defecto: {name}",
+        "not_installed": "{name} no esta instalado",
+        "valid_names": "Nombres validos: {names}",
+        "current_browser": "Navegador actual: {name}",
+        "no_default_browser": "Sin navegador por defecto. Usa /browser <nombre>",
+        "lang_current": "Idioma actual: {lang}",
+        "lang_available": "Idiomas disponibles",
+        "lang_set": "Idioma cambiado a: {lang}",
+        "lang_invalid": "Idioma no valido: {code}. Usa /lang para ver opciones",
+        "lang_usage": "Usa /lang <codigo> para cambiar (ej. /lang en)",
+        # Settings panel
+        "settings_title": "Ajustes",
+        "available": "Disponibles",
+        "change_cmd": "Cambiar",
+        "save_cmd": "/save para guardar ajustes en disco",
+        # Apps panel
+        "cli_apps_title": "Aplicaciones CLI instaladas",
+        "apps_hint": "Tambien puedes pedir en el chat: 'abrir Safari', 'pon musica en Spotify', etc.",
+        # Tools panel
+        "tools_title": "Herramientas conectadas",
+        # Help panel
+        "term_subtitle": "TUI con IA",
+        "what_is": "Que es Term?",
+        "what_is_desc": "Una TUI que conecta con modelos de IA via OAuth CLI.\n  Chatea, controla tu Mac, abre apps, cambia musica,\n  y mas -- todo desde tu terminal.",
+        "commands_title": "Comandos",
+        "shortcuts_title": "Atajos de teclado",
+        "system_examples": "Ejemplos de control del sistema",
+        "config_path": "Config: {path}",
+        # Bindings
+        "quit": "Salir",
+        "clear": "Limpiar",
+        "new_tab": "Nueva tab",
+        "close_tab": "Cerrar tab",
+        "effort_binding": "Esfuerzo",
+        "cancel": "Cancelar",
+        # User/Assistant labels for export
+        "user_label": "Usuario",
+        "assistant_label": "Asistente",
+    },
+    "en": {
+        "effort_label": "Effort",
+        "context_label": "Context",
+        "model_label": "Model",
+        "dir_label": "Dir",
+        "processing": " Processing...",
+        "placeholder": "Message or /command...",
+        "write_or_help": "Type a message or /help for commands",
+        "commands_available": "Available commands",
+        "theme_set": "Theme",
+        "themes_list": "Themes",
+        "effort_set": "Effort",
+        "levels": "Levels",
+        "model_set": "Model",
+        "models_list": "Models",
+        "dir_set": "Dir",
+        "not_found": "Not found",
+        "save_done": "Configuration saved",
+        "about": "Term v{version}",
+        "models_available": "Available models",
+        "themes_available": "Available themes",
+        "active_marker": "<< active",
+        "connected": "connected",
+        "disconnected": "disconnected",
+        "context_reset": "Context reset to 0",
+        "open_usage": "Usage: /open <app name>",
+        "opening": "Opening {name}...",
+        "run_usage": "Usage: /run <command>",
+        "no_output": "(no output)",
+        "cmd_timeout": "Command timed out (10s)",
+        "volume_usage": "Usage: /volume <0-100>",
+        "volume_set": "Volume: {val}%",
+        "play_pause": "Play/Pause",
+        "next_track": "Next track",
+        "prev_track": "Previous track",
+        "copied": "Copied to clipboard",
+        "copy_error": "Copy error: {err}",
+        "no_response_copy": "No response to copy",
+        "messages_count": "Messages in this tab: {count}",
+        "exported": "Exported to {path}",
+        "export_error": "Export error: {err}",
+        "no_active_chat": "No active chat",
+        "compact_tip": "Tip: long conversations use more context. Use /clear to start fresh, or /reset to reset the counter.",
+        "cannot_close_last": "Cannot close the last tab",
+        "unknown_cmd": "Unknown command: {cmd}. Try /help",
+        "select_model": "Select model for new tab",
+        "type_number": "Type the number (1-{n}) or model name",
+        "invalid_model": "Invalid model: {text}",
+        "perms_title": "Term needs permissions to work correctly.",
+        "perms_accept": "By accepting, Term will be able to:",
+        "perms_apps": "Applications     Open and control apps (Safari, Spotify, etc.)",
+        "perms_files": "Files            Read and write files in your working directory",
+        "perms_system": "System           Adjust volume, run shell commands",
+        "perms_config": "Configuration    Save preferences in ~/.config/term/",
+        "perms_net": "Network          Connect to AI via OAuth",
+        "perms_local": "All commands run locally on your machine.",
+        "perms_oauth": "Term uses your existing OAuth authentication.",
+        "perms_question": "Accept permissions? (y/n)",
+        "perms_granted": "Permissions granted",
+        "perms_denied": "Permissions denied -- system functions disabled",
+        "select_browser": "Select browser",
+        "type_browser_number": "Type the number (1-{n}) or the name",
+        "set_default_browser": "Use /browser <name> to set a default",
+        "browser_not_found": "Browser not found: {text}",
+        "no_browsers": "No installed browsers found",
+        "default_browser_set": "Default browser: {name}",
+        "not_installed": "{name} is not installed",
+        "valid_names": "Valid names: {names}",
+        "current_browser": "Current browser: {name}",
+        "no_default_browser": "No default browser. Use /browser <name>",
+        "lang_current": "Current language: {lang}",
+        "lang_available": "Available languages",
+        "lang_set": "Language changed to: {lang}",
+        "lang_invalid": "Invalid language: {code}. Use /lang to see options",
+        "lang_usage": "Use /lang <code> to change (e.g. /lang es)",
+        "settings_title": "Settings",
+        "available": "Available",
+        "change_cmd": "Change",
+        "save_cmd": "/save to save settings to disk",
+        "cli_apps_title": "Installed CLI applications",
+        "apps_hint": "You can also ask in chat: 'open Safari', 'play music on Spotify', etc.",
+        "tools_title": "Connected tools",
+        "term_subtitle": "AI-powered TUI",
+        "what_is": "What is Term?",
+        "what_is_desc": "A TUI that connects to AI models via OAuth CLI.\n  Chat, control your Mac, open apps, change music,\n  and more -- all from your terminal.",
+        "commands_title": "Commands",
+        "shortcuts_title": "Keyboard shortcuts",
+        "system_examples": "System control examples",
+        "config_path": "Config: {path}",
+        "quit": "Quit",
+        "clear": "Clear",
+        "new_tab": "New tab",
+        "close_tab": "Close tab",
+        "effort_binding": "Effort",
+        "cancel": "Cancel",
+        "user_label": "User",
+        "assistant_label": "Assistant",
+    },
+    "pt": {
+        "effort_label": "Esforco",
+        "context_label": "Contexto",
+        "model_label": "Modelo",
+        "dir_label": "Dir",
+        "processing": " Processando...",
+        "placeholder": "Mensagem ou /comando...",
+        "write_or_help": "Digite uma mensagem ou /help para comandos",
+        "commands_available": "Comandos disponiveis",
+        "theme_set": "Tema",
+        "themes_list": "Temas",
+        "effort_set": "Esforco",
+        "levels": "Niveis",
+        "model_set": "Modelo",
+        "models_list": "Modelos",
+        "dir_set": "Dir",
+        "not_found": "Nao encontrado",
+        "save_done": "Configuracao salva",
+        "about": "Term v{version}",
+        "models_available": "Modelos disponiveis",
+        "themes_available": "Temas disponiveis",
+        "active_marker": "<< ativo",
+        "connected": "conectado",
+        "disconnected": "desconectado",
+        "context_reset": "Contexto reiniciado para 0",
+        "open_usage": "Uso: /open <nome do app>",
+        "opening": "Abrindo {name}...",
+        "run_usage": "Uso: /run <comando>",
+        "no_output": "(sem saida)",
+        "cmd_timeout": "Comando expirou (10s)",
+        "volume_usage": "Uso: /volume <0-100>",
+        "volume_set": "Volume: {val}%",
+        "play_pause": "Play/Pausa",
+        "next_track": "Proxima musica",
+        "prev_track": "Musica anterior",
+        "copied": "Copiado para a area de transferencia",
+        "copy_error": "Erro ao copiar: {err}",
+        "no_response_copy": "Sem resposta para copiar",
+        "messages_count": "Mensagens nesta aba: {count}",
+        "exported": "Exportado para {path}",
+        "export_error": "Erro ao exportar: {err}",
+        "no_active_chat": "Sem chat ativo",
+        "compact_tip": "Dica: conversas longas usam mais contexto. Use /clear para comecar de novo, ou /reset para reiniciar o contador.",
+        "cannot_close_last": "Nao e possivel fechar a ultima aba",
+        "unknown_cmd": "Comando desconhecido: {cmd}. Tente /help",
+        "select_model": "Selecione modelo para nova aba",
+        "type_number": "Digite o numero (1-{n}) ou nome do modelo",
+        "invalid_model": "Modelo invalido: {text}",
+        "perms_title": "Term precisa de permissoes para funcionar corretamente.",
+        "perms_accept": "Ao aceitar, Term podera:",
+        "perms_apps": "Aplicativos      Abrir e controlar apps (Safari, Spotify, etc.)",
+        "perms_files": "Arquivos         Ler e escrever arquivos no seu diretorio de trabalho",
+        "perms_system": "Sistema          Ajustar volume, executar comandos shell",
+        "perms_config": "Configuracao     Salvar preferencias em ~/.config/term/",
+        "perms_net": "Rede             Conectar com a IA via OAuth",
+        "perms_local": "Todos os comandos sao executados localmente na sua maquina.",
+        "perms_oauth": "Term usa sua autenticacao OAuth existente.",
+        "perms_question": "Aceitar permissoes? (s/n)",
+        "perms_granted": "Permissoes concedidas",
+        "perms_denied": "Permissoes negadas -- funcoes de sistema desativadas",
+        "select_browser": "Selecione navegador",
+        "type_browser_number": "Digite o numero (1-{n}) ou o nome",
+        "set_default_browser": "Use /browser <nome> para definir um padrao",
+        "browser_not_found": "Navegador nao encontrado: {text}",
+        "no_browsers": "Nenhum navegador instalado encontrado",
+        "default_browser_set": "Navegador padrao: {name}",
+        "not_installed": "{name} nao esta instalado",
+        "valid_names": "Nomes validos: {names}",
+        "current_browser": "Navegador atual: {name}",
+        "no_default_browser": "Sem navegador padrao. Use /browser <nome>",
+        "lang_current": "Idioma atual: {lang}",
+        "lang_available": "Idiomas disponiveis",
+        "lang_set": "Idioma alterado para: {lang}",
+        "lang_invalid": "Idioma invalido: {code}. Use /lang para ver opcoes",
+        "lang_usage": "Use /lang <codigo> para mudar (ex. /lang en)",
+        "settings_title": "Configuracoes",
+        "available": "Disponiveis",
+        "change_cmd": "Alterar",
+        "save_cmd": "/save para salvar configuracoes no disco",
+        "cli_apps_title": "Aplicativos CLI instalados",
+        "apps_hint": "Voce tambem pode pedir no chat: 'abrir Safari', 'tocar musica no Spotify', etc.",
+        "tools_title": "Ferramentas conectadas",
+        "term_subtitle": "TUI com IA",
+        "what_is": "O que e Term?",
+        "what_is_desc": "Uma TUI que conecta com modelos de IA via OAuth CLI.\n  Converse, controle seu Mac, abra apps, mude musica,\n  e mais -- tudo do seu terminal.",
+        "commands_title": "Comandos",
+        "shortcuts_title": "Atalhos de teclado",
+        "system_examples": "Exemplos de controle do sistema",
+        "config_path": "Config: {path}",
+        "quit": "Sair",
+        "clear": "Limpar",
+        "new_tab": "Nova aba",
+        "close_tab": "Fechar aba",
+        "effort_binding": "Esforco",
+        "cancel": "Cancelar",
+        "user_label": "Usuario",
+        "assistant_label": "Assistente",
+    },
+    "fr": {
+        "effort_label": "Effort",
+        "context_label": "Contexte",
+        "model_label": "Modele",
+        "dir_label": "Rep",
+        "processing": " Traitement...",
+        "placeholder": "Message ou /commande...",
+        "write_or_help": "Tapez un message ou /help pour les commandes",
+        "commands_available": "Commandes disponibles",
+        "theme_set": "Theme",
+        "themes_list": "Themes",
+        "effort_set": "Effort",
+        "levels": "Niveaux",
+        "model_set": "Modele",
+        "models_list": "Modeles",
+        "dir_set": "Rep",
+        "not_found": "Non trouve",
+        "save_done": "Configuration sauvegardee",
+        "about": "Term v{version}",
+        "models_available": "Modeles disponibles",
+        "themes_available": "Themes disponibles",
+        "active_marker": "<< actif",
+        "connected": "connecte",
+        "disconnected": "deconnecte",
+        "context_reset": "Contexte reinitialise a 0",
+        "open_usage": "Utilisation: /open <nom app>",
+        "opening": "Ouverture de {name}...",
+        "run_usage": "Utilisation: /run <commande>",
+        "no_output": "(pas de sortie)",
+        "cmd_timeout": "Commande expiree (10s)",
+        "volume_usage": "Utilisation: /volume <0-100>",
+        "volume_set": "Volume: {val}%",
+        "play_pause": "Play/Pause",
+        "next_track": "Piste suivante",
+        "prev_track": "Piste precedente",
+        "copied": "Copie dans le presse-papiers",
+        "copy_error": "Erreur de copie: {err}",
+        "no_response_copy": "Pas de reponse a copier",
+        "messages_count": "Messages dans cet onglet: {count}",
+        "exported": "Exporte vers {path}",
+        "export_error": "Erreur d'export: {err}",
+        "no_active_chat": "Pas de chat actif",
+        "compact_tip": "Conseil: les longues conversations utilisent plus de contexte. Utilisez /clear pour recommencer, ou /reset pour reinitialiser le compteur.",
+        "cannot_close_last": "Impossible de fermer le dernier onglet",
+        "unknown_cmd": "Commande inconnue: {cmd}. Essayez /help",
+        "select_model": "Selectionnez le modele pour le nouvel onglet",
+        "type_number": "Tapez le numero (1-{n}) ou le nom du modele",
+        "invalid_model": "Modele invalide: {text}",
+        "perms_title": "Term a besoin de permissions pour fonctionner correctement.",
+        "perms_accept": "En acceptant, Term pourra:",
+        "perms_apps": "Applications     Ouvrir et controler des apps (Safari, Spotify, etc.)",
+        "perms_files": "Fichiers         Lire et ecrire des fichiers dans votre repertoire de travail",
+        "perms_system": "Systeme          Ajuster le volume, executer des commandes shell",
+        "perms_config": "Configuration    Sauvegarder les preferences dans ~/.config/term/",
+        "perms_net": "Reseau           Se connecter a l'IA via OAuth",
+        "perms_local": "Toutes les commandes s'executent localement sur votre machine.",
+        "perms_oauth": "Term utilise votre authentification OAuth existante.",
+        "perms_question": "Accepter les permissions? (o/n)",
+        "perms_granted": "Permissions accordees",
+        "perms_denied": "Permissions refusees -- fonctions systeme desactivees",
+        "select_browser": "Selectionnez le navigateur",
+        "type_browser_number": "Tapez le numero (1-{n}) ou le nom",
+        "set_default_browser": "Utilisez /browser <nom> pour definir un defaut",
+        "browser_not_found": "Navigateur non trouve: {text}",
+        "no_browsers": "Aucun navigateur installe trouve",
+        "default_browser_set": "Navigateur par defaut: {name}",
+        "not_installed": "{name} n'est pas installe",
+        "valid_names": "Noms valides: {names}",
+        "current_browser": "Navigateur actuel: {name}",
+        "no_default_browser": "Pas de navigateur par defaut. Utilisez /browser <nom>",
+        "lang_current": "Langue actuelle: {lang}",
+        "lang_available": "Langues disponibles",
+        "lang_set": "Langue changee en: {lang}",
+        "lang_invalid": "Langue invalide: {code}. Utilisez /lang pour voir les options",
+        "lang_usage": "Utilisez /lang <code> pour changer (ex. /lang en)",
+        "settings_title": "Parametres",
+        "available": "Disponibles",
+        "change_cmd": "Changer",
+        "save_cmd": "/save pour sauvegarder les parametres sur le disque",
+        "cli_apps_title": "Applications CLI installees",
+        "apps_hint": "Vous pouvez aussi demander dans le chat: 'ouvrir Safari', 'mettre de la musique sur Spotify', etc.",
+        "tools_title": "Outils connectes",
+        "term_subtitle": "TUI avec IA",
+        "what_is": "Qu'est-ce que Term?",
+        "what_is_desc": "Un TUI qui se connecte aux modeles d'IA via OAuth CLI.\n  Discutez, controlez votre Mac, ouvrez des apps, changez la musique,\n  et plus -- tout depuis votre terminal.",
+        "commands_title": "Commandes",
+        "shortcuts_title": "Raccourcis clavier",
+        "system_examples": "Exemples de controle du systeme",
+        "config_path": "Config: {path}",
+        "quit": "Quitter",
+        "clear": "Effacer",
+        "new_tab": "Nouvel onglet",
+        "close_tab": "Fermer l'onglet",
+        "effort_binding": "Effort",
+        "cancel": "Annuler",
+        "user_label": "Utilisateur",
+        "assistant_label": "Assistant",
+    },
+}
+
+# Fallback: for languages without full translation, use Spanish
+for _code in LANGUAGES:
+    if _code not in TRANSLATIONS:
+        TRANSLATIONS[_code] = TRANSLATIONS["es"]
 
 # ---------------------------------------------------------------------------
 # System prompt for macOS control
 # ---------------------------------------------------------------------------
 
-SYSTEM_CONTEXT = (
+SYSTEM_CONTEXT_BASE = (
     "Eres Term, un asistente de terminal con IA. Puedes controlar esta Mac.\n"
     "Cuando el usuario pida abrir apps, cambiar canciones, ajustar volumen, etc., usa osascript/AppleScript.\n\n"
     "Ejemplos:\n"
@@ -148,8 +575,14 @@ SYSTEM_CONTEXT = (
     "Tienes acceso completo al shell. Ejecuta comandos directamente. Se conciso."
 )
 
+
+def _build_system_context(lang: str) -> str:
+    lang_name = LANGUAGES.get(lang, "Espanol")
+    lang_instruction = f"\n\nIMPORTANT: Always respond in {lang_name} ({lang})."
+    return SYSTEM_CONTEXT_BASE + lang_instruction
+
 # ---------------------------------------------------------------------------
-# Command reference (Spanish)
+# Command reference
 # ---------------------------------------------------------------------------
 
 COMMANDS_HELP: dict[str, str] = {
@@ -185,6 +618,7 @@ COMMANDS_HELP: dict[str, str] = {
     "/restart":               "Cerrar y reiniciar Term",
     "/browse [url]":          "Abrir URL en navegador (selector de navegadores)",
     "/browser <nombre>":      "Establecer navegador por defecto (brave, chrome, safari)",
+    "/lang [codigo]":         "Cambiar idioma (es, en, pt, fr, de, it, zh, ja, ko, ar)",
 }
 
 SHORTCUTS_HELP: dict[str, str] = {
@@ -214,6 +648,7 @@ def _load_config() -> dict:
         "effort": "high",
         "model": "claude",
         "permissions_granted": False,
+        "lang": "es",
     }
 
 
@@ -319,37 +754,31 @@ Screen {
     background: $bg1;
 }
 
-/* -- Nav sidebar -- */
-#nav {
-    width: 18;
+/* -- Top bar -- */
+#top-bar {
+    dock: top;
+    height: 2;
     background: $bg2;
-    border-right: solid $border;
-    padding: 1 0;
+    border-bottom: solid $border;
+    padding: 0 2;
 }
-#nav-title {
+#top-bar-title {
     color: $accent1;
     text-style: bold;
-    text-align: center;
-    padding: 0 0 1 0;
+    width: 1fr;
+    padding: 0 1;
 }
-.nav-btn {
-    width: 100%;
-    background: transparent;
-    color: $muted;
+.theme-btn {
+    background: $bg3;
+    color: $accent1;
     border: none;
     padding: 0 2;
-    margin: 0;
-    text-align: left;
     min-width: 16;
+    dock: right;
 }
-.nav-btn:hover {
-    color: $text;
-    background: $bg3;
-}
-.nav-btn.-active, .nav-btn:focus {
-    color: $accent1;
-    background: $bg3;
-    text-style: bold;
+.theme-btn:hover {
+    background: $accent1;
+    color: $bg1;
 }
 
 /* -- Main area -- */
@@ -630,11 +1059,22 @@ class TermApp(App):
         self._pending_browse_url: str = ""
         self._awaiting_permissions = False
         self._permissions_granted: bool = cfg.get("permissions_granted", False)
+        self._lang: str = cfg.get("lang", "es")
         super().__init__()
         self.workdir: str = workdir or cfg.get("workdir", str(Path.home()))
         self.theme_key = theme or cfg.get("theme", "neon")
         self.effort = cfg.get("effort", "high")
         self.current_model = cfg.get("model", "claude")
+
+    # ------------------------------------------------------------------ i18n helper
+
+    def _t(self, key: str, **kwargs: object) -> str:
+        """Get translated string for current language."""
+        strings = TRANSLATIONS.get(self._lang, TRANSLATIONS["es"])
+        text = strings.get(key, TRANSLATIONS["es"].get(key, key))
+        if kwargs:
+            text = text.format(**kwargs)
+        return text
 
     # ----------------------------------------------------- CSS variables (COMPLETE)
 
@@ -737,23 +1177,21 @@ class TermApp(App):
     # ------------------------------------------------------------ compose
 
     def compose(self) -> ComposeResult:
-        with Horizontal():
-            with Vertical(id="nav"):
-                yield Label("[bold]TERM[/]", id="nav-title")
-                yield Button("Chat", classes="nav-btn -active", id="nav-chat")
-                yield Button("Ajustes", classes="nav-btn", id="nav-settings")
-                yield Button("Apps", classes="nav-btn", id="nav-apps")
-                yield Button("Herramientas", classes="nav-btn", id="nav-tools")
-                yield Button("Ayuda", classes="nav-btn", id="nav-help")
-            with Vertical(id="main"):
-                with TabbedContent(id="main-tabs"):
-                    tab_id = self._next_tab_id()
-                    chat = ChatTab(
-                        self.current_model, tab_id, self.theme_key, self.workdir,
-                    )
-                    self._tabs[tab_id] = chat
-                    with TabPane("Chat", id=f"pane-{tab_id}"):
-                        yield chat
+        theme_name = THEMES.get(self.theme_key, THEMES["neon"])["name"]
+        yield Horizontal(
+            Label("[bold]TERM[/]", id="top-bar-title"),
+            Button(f"[ {theme_name} ]", classes="theme-btn", id="theme-cycle-btn"),
+            id="top-bar",
+        )
+        with Vertical(id="main"):
+            with TabbedContent(id="main-tabs"):
+                tab_id = self._next_tab_id()
+                chat = ChatTab(
+                    self.current_model, tab_id, self.theme_key, self.workdir,
+                )
+                self._tabs[tab_id] = chat
+                with TabPane("Chat", id=f"pane-{tab_id}"):
+                    yield chat
         yield Horizontal(
             Label("", id="status-effort"),
             Label("  ", id="status-sep1"),
@@ -767,6 +1205,32 @@ class TermApp(App):
         yield Footer()
 
     # ------------------------------------------------------------ lifecycle
+
+    def _update_tab_labels(self) -> None:
+        """Update tab labels: active tab shows ' x' when 2+ tabs exist."""
+        try:
+            tc = self.query_one("#main-tabs", TabbedContent)
+            active = tc.active
+            for tid, chat in self._tabs.items():
+                pane_id = f"pane-{tid}"
+                try:
+                    tab = tc.get_tab(pane_id)
+                    label_text = str(tab.label)
+                    # Strip existing ' x' suffix
+                    if label_text.endswith(" x"):
+                        label_text = label_text[:-2]
+                    if pane_id == active and len(self._tabs) > 1:
+                        tab.label = label_text + " x"
+                    else:
+                        tab.label = label_text
+                except Exception:
+                    pass
+        except NoMatches:
+            pass
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """When a tab is activated, update labels to show/hide close indicator."""
+        self._update_tab_labels()
 
     async def on_mount(self) -> None:
         self._refresh_status()
@@ -796,16 +1260,16 @@ class TermApp(App):
             except NoMatches:
                 pass
             perm_text = (
-                "[bold]Term necesita permisos para funcionar correctamente.[/]\n\n"
-                "Al aceptar, Term podra:\n\n"
-                "  [bold]Aplicaciones[/]     Abrir y controlar apps (Safari, Spotify, etc.)\n"
-                "  [bold]Archivos[/]         Leer y escribir archivos en tu directorio de trabajo\n"
-                "  [bold]Sistema[/]          Ajustar volumen, ejecutar comandos shell\n"
-                "  [bold]Configuracion[/]    Guardar preferencias en ~/.config/term/\n"
-                "  [bold]Red[/]              Conectar con la IA via OAuth\n\n"
-                "Todos los comandos se ejecutan localmente en tu maquina.\n"
-                "Term usa tu autenticacion OAuth existente.\n\n"
-                "[bold]Aceptar permisos? (s/n)[/]"
+                f"[bold]{self._t('perms_title')}[/]\n\n"
+                f"{self._t('perms_accept')}\n\n"
+                f"  [bold]{self._t('perms_apps')}[/]\n"
+                f"  [bold]{self._t('perms_files')}[/]\n"
+                f"  [bold]{self._t('perms_system')}[/]\n"
+                f"  [bold]{self._t('perms_config')}[/]\n"
+                f"  [bold]{self._t('perms_net')}[/]\n\n"
+                f"{self._t('perms_local')}\n"
+                f"{self._t('perms_oauth')}\n\n"
+                f"[bold]{self._t('perms_question')}[/]"
             )
             await msgs.mount(Static(perm_text, classes="info-block", id="perm-dialog"))
             msgs.scroll_end(animate=False)
@@ -819,19 +1283,13 @@ class TermApp(App):
         if not self.is_running:
             return
         self._refresh_status()
-        self.call_later(self._apply_theme)
-
-    def _apply_theme(self) -> None:
-        """Re-parse stylesheet with updated CSS variables."""
+        # Update theme button label
         try:
-            self.stylesheet.reparse()
-        except Exception:
+            theme_name = THEMES.get(value, THEMES["neon"])["name"]
+            self.query_one("#theme-cycle-btn", Button).label = f"[ {theme_name} ]"
+        except NoMatches:
             pass
         self.refresh(layout=True)
-        try:
-            self.screen.refresh(layout=True)
-        except Exception:
-            pass
 
     # ------------------------------------------------------------ helpers
 
@@ -846,33 +1304,21 @@ class TermApp(App):
         bar = ">" * filled + "-" * (bar_len - filled)
         try:
             self.query_one("#status-effort", Label).update(
-                f"[bold]Esfuerzo:[/] {self.effort}"
+                f"[bold]{self._t('effort_label')}:[/] {self.effort}"
             )
             self.query_one("#status-context", Label).update(
-                f"[bold]Contexto:[/] [{bar}] {pct}% ({self._context_tokens:,}/{self._max_context:,})"
+                f"[bold]{self._t('context_label')}:[/] [{bar}] {pct}% ({self._context_tokens:,}/{self._max_context:,})"
             )
             model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
             self.query_one("#status-model", Label).update(
-                f"[bold]Modelo:[/] {model_name}"
+                f"[bold]{self._t('model_label')}:[/] {model_name}"
             )
             wd = self.workdir
             if len(wd) > 30:
                 wd = "..." + wd[-27:]
-            self.query_one("#status-workdir", Label).update(f"[bold]Dir:[/] {wd}")
+            self.query_one("#status-workdir", Label).update(f"[bold]{self._t('dir_label')}:[/] {wd}")
         except NoMatches:
             pass
-
-    def _set_nav_active(self, panel: str) -> None:
-        self._active_panel = panel
-        for suffix in ("chat", "settings", "apps", "tools", "help"):
-            try:
-                btn = self.query_one(f"#nav-{suffix}", Button)
-                if suffix == panel:
-                    btn.add_class("-active")
-                else:
-                    btn.remove_class("-active")
-            except NoMatches:
-                pass
 
     def _persist_config(self) -> None:
         _save_config({
@@ -881,6 +1327,7 @@ class TermApp(App):
             "effort": self.effort,
             "model": self.current_model,
             "permissions_granted": self._permissions_granted,
+            "lang": self._lang,
         })
 
     def _active_tab_id(self) -> str | None:
@@ -897,7 +1344,7 @@ class TermApp(App):
     # ------------------------------------------------------------ panel switching
 
     async def _show_panel(self, panel: str) -> None:
-        self._set_nav_active(panel)
+        self._active_panel = panel
         tc = self.query_one("#main-tabs", TabbedContent)
 
         if panel == "chat":
@@ -920,19 +1367,19 @@ class TermApp(App):
             theme_name = THEMES[self.theme_key]["name"]
             model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
             content = (
-                f"[bold]Ajustes[/]\n\n"
-                f"Tema: [bold]{theme_name}[/]\n"
-                f"  Disponibles: {', '.join(THEMES.keys())}\n"
-                f"  Cambiar: [bold]/theme <nombre>[/]\n\n"
-                f"Modelo: [bold]{model_name}[/]\n"
-                f"  Disponibles: {', '.join(AI_MODELS.keys())}\n"
-                f"  Cambiar: [bold]/model <nombre>[/]\n\n"
-                f"Esfuerzo: [bold]{self.effort}[/]\n"
-                f"  Niveles: {', '.join(EFFORT_LEVELS)}\n"
-                f"  Cambiar: [bold]/effort <nivel>[/]\n\n"
-                f"Directorio: [bold]{self.workdir}[/]\n"
-                f"  Cambiar: [bold]/workdir <ruta>[/]\n\n"
-                f"[bold]/save[/] para guardar ajustes en disco"
+                f"[bold]{self._t('settings_title')}[/]\n\n"
+                f"{self._t('theme_set')}: [bold]{theme_name}[/]\n"
+                f"  {self._t('available')}: {', '.join(THEMES.keys())}\n"
+                f"  {self._t('change_cmd')}: [bold]/theme <nombre>[/]\n\n"
+                f"{self._t('model_label')}: [bold]{model_name}[/]\n"
+                f"  {self._t('available')}: {', '.join(AI_MODELS.keys())}\n"
+                f"  {self._t('change_cmd')}: [bold]/model <nombre>[/]\n\n"
+                f"{self._t('effort_label')}: [bold]{self.effort}[/]\n"
+                f"  {self._t('levels')}: {', '.join(EFFORT_LEVELS)}\n"
+                f"  {self._t('change_cmd')}: [bold]/effort <nivel>[/]\n\n"
+                f"{self._t('dir_label')}: [bold]{self.workdir}[/]\n"
+                f"  {self._t('change_cmd')}: [bold]/workdir <ruta>[/]\n\n"
+                f"[bold]{self._t('save_cmd')}[/]"
             )
             await pane.mount(Static(content, classes="panel"))
 
@@ -940,14 +1387,13 @@ class TermApp(App):
             cats: dict[str, list[dict]] = {}
             for app in self._apps:
                 cats.setdefault(app["category"], []).append(app)
-            lines = ["[bold]Aplicaciones CLI instaladas[/]\n"]
+            lines = [f"[bold]{self._t('cli_apps_title')}[/]\n"]
             for cat, items in cats.items():
                 lines.append(f"\n[bold]{cat}[/]")
                 for it in items:
                     lines.append(f"  {it['name']} [dim]({it['cmd']})[/]")
             lines.append(
-                "\n[dim]Tambien puedes pedir en el chat: 'abrir Safari', "
-                "'pon musica en Spotify', etc.[/]"
+                f"\n[dim]{self._t('apps_hint')}[/]"
             )
             await pane.mount(Static("\n".join(lines), classes="panel"))
 
@@ -960,7 +1406,7 @@ class TermApp(App):
                 ("Docker", "docker", "Contenedores"),
                 ("osascript", "osascript", "Control del sistema macOS"),
             ]
-            lines = ["[bold]Herramientas conectadas[/]\n"]
+            lines = [f"[bold]{self._t('tools_title')}[/]\n"]
             for name, cmd, desc in checks:
                 found = shutil.which(cmd) is not None
                 marker = "[green bold]OK[/]" if found else "[red]NO[/]"
@@ -971,59 +1417,52 @@ class TermApp(App):
             models_info = []
             for k, m in AI_MODELS.items():
                 connected = shutil.which(m["cmd"][0]) is not None
-                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
                 models_info.append(f"  [bold]{m['name']}[/] ({k}) {status}")
 
             lines = [
                 _build_logo(self.theme_key),
                 "",
-                "[bold]Term[/] -- TUI con IA",
+                f"[bold]Term[/] -- {self._t('term_subtitle')}",
                 "",
-                "[bold]Que es Term?[/]",
-                "  Una TUI que conecta con modelos de IA via OAuth CLI.",
-                "  Chatea, controla tu Mac, abre apps, cambia musica,",
-                "  y mas -- todo desde tu terminal.",
+                f"[bold]{self._t('what_is')}[/]",
+                f"  {self._t('what_is_desc')}",
                 "",
-                "[bold]Modelos disponibles:[/]",
+                f"[bold]{self._t('models_available')}:[/]",
                 *models_info,
                 "",
-                "[bold]Comandos:[/]",
+                f"[bold]{self._t('commands_title')}:[/]",
             ]
             for cmd, desc in COMMANDS_HELP.items():
                 lines.append(f"  [bold]{cmd:28s}[/] {desc}")
             lines.append("")
-            lines.append("[bold]Atajos de teclado:[/]")
+            lines.append(f"[bold]{self._t('shortcuts_title')}:[/]")
             for key, desc in SHORTCUTS_HELP.items():
                 lines.append(f"  [bold]{key:28s}[/] {desc}")
             lines.extend([
                 "",
-                "[bold]Ejemplos de control del sistema:[/]",
+                f"[bold]{self._t('system_examples')}:[/]",
                 "  'abrir Safari'",
                 "  'siguiente cancion en Spotify'",
                 "  'pon el volumen a 50'",
                 "  'abre la terminal'",
                 "",
-                f"[dim]Config: {CONFIG_PATH}[/]",
+                f"[dim]{self._t('config_path', path=CONFIG_PATH)}[/]",
             ])
             await pane.mount(Static("\n".join(lines), classes="panel"))
 
     def _show_panel_sync(self, panel: str) -> None:
         self.run_worker(self._show_panel(panel), exclusive=True)
 
-    # ------------------------------------------------------------ nav buttons
+    # ------------------------------------------------------------ button handler
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id or ""
-        mapping = {
-            "nav-chat": "chat",
-            "nav-settings": "settings",
-            "nav-apps": "apps",
-            "nav-tools": "tools",
-            "nav-help": "help",
-        }
-        panel = mapping.get(bid)
-        if panel:
-            self._show_panel_sync(panel)
+        if bid == "theme-cycle-btn":
+            keys = list(THEMES.keys())
+            idx = keys.index(self.theme_key) if self.theme_key in keys else 0
+            self.theme_key = keys[(idx + 1) % len(keys)]
+            self.notify(f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']}", timeout=1)
 
     # ------------------------------------------------------------ input handler
 
@@ -1052,7 +1491,7 @@ class TermApp(App):
                 cfg = _load_config()
                 cfg["permissions_granted"] = True
                 _save_config(cfg)
-                self.notify("Permisos concedidos", timeout=2)
+                self.notify(self._t("perms_granted"), timeout=2)
                 first_tab = next(iter(self._tabs.values()), None)
                 if first_tab:
                     try:
@@ -1061,13 +1500,13 @@ class TermApp(App):
                         model = AI_MODELS.get(first_tab.model_key, AI_MODELS["claude"])
                         await msgs.mount(Static(
                             logo + "\n\n"
-                            f"[dim]{model['name']} | Escribe un mensaje o /help para comandos[/]",
+                            f"[dim]{model['name']} | {self._t('write_or_help')}[/]",
                             classes="info-block",
                         ))
                     except NoMatches:
                         pass
             else:
-                self.notify("Permisos denegados -- funciones de sistema desactivadas", timeout=3)
+                self.notify(self._t("perms_denied"), timeout=3)
             return
 
         # Model selection flow for /new
@@ -1085,7 +1524,7 @@ class TermApp(App):
             elif text in AI_MODELS:
                 selected = text
             else:
-                self.notify(f"Modelo invalido: {text}", timeout=2)
+                self.notify(self._t("invalid_model", text=text), timeout=2)
                 return
             await self._create_tab(self._pending_new_tab_name, selected)
             self._pending_new_tab_name = None
@@ -1110,9 +1549,9 @@ class TermApp(App):
             if selected_browser:
                 url = self._pending_browse_url or "https://www.google.com"
                 subprocess.Popen(["open", "-a", selected_browser, url])
-                self.notify(f"Abriendo {selected_browser}...", timeout=1)
+                self.notify(self._t("opening", name=selected_browser), timeout=1)
             else:
-                self.notify(f"Navegador no encontrado: {text}", timeout=2)
+                self.notify(self._t("browser_not_found", text=text), timeout=2)
             self._pending_browse_url = ""
             return
 
@@ -1124,7 +1563,7 @@ class TermApp(App):
 
         # Bare "/" shows command list
         if text == "/":
-            lines = ["[bold]Comandos disponibles:[/]\n"]
+            lines = [f"[bold]{self._t('commands_available')}:[/]\n"]
             for c, d in COMMANDS_HELP.items():
                 lines.append(f"  [bold]{c:28s}[/] {d}")
             try:
@@ -1177,17 +1616,17 @@ class TermApp(App):
         if cmd == "/theme":
             if arg in THEMES:
                 self.theme_key = arg
-                self.notify(f"Tema: {THEMES[arg]['name']}", timeout=1)
+                self.notify(f"{self._t('theme_set')}: {THEMES[arg]['name']}", timeout=1)
             else:
-                self.notify(f"Temas: {', '.join(THEMES.keys())}", timeout=3)
+                self.notify(f"{self._t('themes_list')}: {', '.join(THEMES.keys())}", timeout=3)
 
         elif cmd == "/effort":
             if arg in EFFORT_LEVELS:
                 self.effort = arg
                 self._refresh_status()
-                self.notify(f"Esfuerzo: {arg}", timeout=1)
+                self.notify(f"{self._t('effort_set')}: {arg}", timeout=1)
             else:
-                self.notify(f"Niveles: {', '.join(EFFORT_LEVELS)}", timeout=2)
+                self.notify(f"{self._t('levels')}: {', '.join(EFFORT_LEVELS)}", timeout=2)
 
         elif cmd == "/model":
             if arg in AI_MODELS:
@@ -1196,9 +1635,9 @@ class TermApp(App):
                 if chat:
                     chat.model_key = arg
                 self._refresh_status()
-                self.notify(f"Modelo: {AI_MODELS[arg]['name']}", timeout=1)
+                self.notify(f"{self._t('model_set')}: {AI_MODELS[arg]['name']}", timeout=1)
             else:
-                self.notify(f"Modelos: {', '.join(AI_MODELS.keys())}", timeout=2)
+                self.notify(f"{self._t('models_list')}: {', '.join(AI_MODELS.keys())}", timeout=2)
 
         elif cmd == "/name":
             if arg:
@@ -1218,9 +1657,9 @@ class TermApp(App):
                     if chat:
                         chat.workdir = expanded
                     self._refresh_status()
-                    self.notify(f"Dir: {expanded}", timeout=1)
+                    self.notify(f"{self._t('dir_set')}: {expanded}", timeout=1)
                 else:
-                    self.notify(f"No encontrado: {arg}", timeout=2)
+                    self.notify(f"{self._t('not_found')}: {arg}", timeout=2)
 
         elif cmd == "/new":
             tokens = arg.split() if arg else []
@@ -1240,17 +1679,16 @@ class TermApp(App):
                 items = []
                 for i, (k, m) in enumerate(AI_MODELS.items(), 1):
                     connected = shutil.which(m["cmd"][0]) is not None
-                    status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                    status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
                     items.append(
                         f"  [bold]{i}[/]) [bold]{m['name']}[/] ({k}) {status}"
                     )
                 try:
                     msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
                     await msgs.mount(Static(
-                        "[bold]Selecciona modelo para la nueva tab:[/]\n\n"
+                        f"[bold]{self._t('select_model')}:[/]\n\n"
                         + "\n".join(items)
-                        + f"\n\n[dim]Escribe el numero (1-{len(AI_MODELS)}) "
-                        "o el nombre del modelo[/]",
+                        + f"\n\n[dim]{self._t('type_number', n=len(AI_MODELS))}[/]",
                         classes="info-block",
                         id="model-selector",
                     ))
@@ -1267,7 +1705,7 @@ class TermApp(App):
 
         elif cmd == "/save":
             self._persist_config()
-            self.notify("Configuracion guardada", timeout=2)
+            self.notify(self._t("save_done"), timeout=2)
 
         elif cmd == "/help":
             self._show_panel_sync("help")
@@ -1282,14 +1720,14 @@ class TermApp(App):
             self._show_panel_sync("settings")
 
         elif cmd == "/about":
-            self.notify(f"Term v{VERSION}", timeout=3)
+            self.notify(self._t("about", version=VERSION), timeout=3)
 
         elif cmd == "/models":
-            lines = ["[bold]Modelos disponibles:[/]\n"]
+            lines = [f"[bold]{self._t('models_available')}:[/]\n"]
             for i, (k, m) in enumerate(AI_MODELS.items(), 1):
                 connected = shutil.which(m["cmd"][0]) is not None
-                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
-                current = " [bold cyan]<< activo[/]" if k == self.current_model else ""
+                status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
+                current = f" [bold cyan]{self._t('active_marker')}[/]" if k == self.current_model else ""
                 lines.append(
                     f"  {i}) [bold]{m['name']}[/] ({k}) {status}{current}"
                 )
@@ -1301,9 +1739,9 @@ class TermApp(App):
                 pass
 
         elif cmd == "/themes":
-            lines = ["[bold]Temas disponibles:[/]\n"]
+            lines = [f"[bold]{self._t('themes_available')}:[/]\n"]
             for k, t in THEMES.items():
-                current = " [bold cyan]<< activo[/]" if k == self.theme_key else ""
+                current = f" [bold cyan]{self._t('active_marker')}[/]" if k == self.theme_key else ""
                 lines.append(f"  [bold]{t['name']}[/] ({k}){current}")
             try:
                 msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
@@ -1314,30 +1752,30 @@ class TermApp(App):
 
         elif cmd == "/status":
             self.notify(
-                f"Tema: {THEMES[self.theme_key]['name']} | "
-                f"Modelo: {AI_MODELS[self.current_model]['name']} | "
-                f"Esfuerzo: {self.effort} | "
-                f"Dir: {self.workdir}",
+                f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']} | "
+                f"{self._t('model_label')}: {AI_MODELS[self.current_model]['name']} | "
+                f"{self._t('effort_label')}: {self.effort} | "
+                f"{self._t('dir_label')}: {self.workdir}",
                 timeout=5,
             )
 
         elif cmd == "/reset":
             self._context_tokens = 0
             self._refresh_status()
-            self.notify("Contexto reiniciado a 0", timeout=1)
+            self.notify(self._t("context_reset"), timeout=1)
 
         elif cmd == "/version":
-            self.notify(f"Term v{VERSION}", timeout=2)
+            self.notify(self._t("about", version=VERSION), timeout=2)
 
         elif cmd == "/open":
             if arg:
                 try:
                     subprocess.Popen(["open", "-a", arg])
-                    self.notify(f"Abriendo {arg}...", timeout=1)
+                    self.notify(self._t("opening", name=arg), timeout=1)
                 except Exception as e:
                     self.notify(f"Error: {e}", timeout=2)
             else:
-                self.notify("Uso: /open <nombre de app>", timeout=2)
+                self.notify(self._t("open_usage"), timeout=2)
 
         elif cmd == "/run":
             if arg:
@@ -1350,7 +1788,7 @@ class TermApp(App):
                         timeout=10,
                         cwd=self.workdir,
                     )
-                    output = result.stdout or result.stderr or "(sin salida)"
+                    output = result.stdout or result.stderr or self._t("no_output")
                     try:
                         msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
                         await msgs.mount(Static(
@@ -1361,11 +1799,11 @@ class TermApp(App):
                     except NoMatches:
                         pass
                 except subprocess.TimeoutExpired:
-                    self.notify("Comando agotado (10s)", timeout=2)
+                    self.notify(self._t("cmd_timeout"), timeout=2)
                 except Exception as e:
                     self.notify(f"Error: {e}", timeout=2)
             else:
-                self.notify("Uso: /run <comando>", timeout=2)
+                self.notify(self._t("run_usage"), timeout=2)
 
         elif cmd == "/volume":
             if arg and arg.isdigit() and 0 <= int(arg) <= 100:
@@ -1373,30 +1811,30 @@ class TermApp(App):
                     ["osascript", "-e", f"set volume output volume {arg}"],
                     capture_output=True,
                 )
-                self.notify(f"Volumen: {arg}%", timeout=1)
+                self.notify(self._t("volume_set", val=arg), timeout=1)
             else:
-                self.notify("Uso: /volume <0-100>", timeout=2)
+                self.notify(self._t("volume_usage"), timeout=2)
 
         elif cmd == "/play":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to playpause'],
                 capture_output=True,
             )
-            self.notify("Play/Pausa", timeout=1)
+            self.notify(self._t("play_pause"), timeout=1)
 
         elif cmd == "/next":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to next track'],
                 capture_output=True,
             )
-            self.notify("Siguiente cancion", timeout=1)
+            self.notify(self._t("next_track"), timeout=1)
 
         elif cmd == "/prev":
             subprocess.run(
                 ["osascript", "-e", 'tell application "Spotify" to previous track'],
                 capture_output=True,
             )
-            self.notify("Cancion anterior", timeout=1)
+            self.notify(self._t("prev_track"), timeout=1)
 
         elif cmd == "/copy":
             chat = self._tabs.get(tab_id)
@@ -1407,16 +1845,16 @@ class TermApp(App):
                         input=chat.last_response.encode(),
                         check=True,
                     )
-                    self.notify("Copiado al portapapeles", timeout=1)
+                    self.notify(self._t("copied"), timeout=1)
                 except Exception as e:
-                    self.notify(f"Error al copiar: {e}", timeout=2)
+                    self.notify(self._t("copy_error", err=e), timeout=2)
             else:
-                self.notify("No hay respuesta para copiar", timeout=2)
+                self.notify(self._t("no_response_copy"), timeout=2)
 
         elif cmd == "/history":
             chat = self._tabs.get(tab_id)
             count = chat.message_count if chat else 0
-            self.notify(f"Mensajes en esta tab: {count}", timeout=2)
+            self.notify(self._t("messages_count", count=count), timeout=2)
 
         elif cmd == "/export":
             chat = self._tabs.get(tab_id)
@@ -1430,24 +1868,20 @@ class TermApp(App):
                     texts = []
                     for child in msgs_area.children:
                         if isinstance(child, UserMessage):
-                            texts.append(f"[Usuario] {child.renderable}")
+                            texts.append(f"[{self._t('user_label')}] {child.renderable}")
                         elif isinstance(child, AssistantMessage):
-                            texts.append(f"[Asistente] {child._text}")
+                            texts.append(f"[{self._t('assistant_label')}] {child._text}")
                         elif isinstance(child, Static):
                             texts.append(str(child.renderable))
                     path.write_text("\n\n".join(texts))
-                    self.notify(f"Exportado a {path}", timeout=3)
+                    self.notify(self._t("exported", path=path), timeout=3)
                 except Exception as e:
-                    self.notify(f"Error al exportar: {e}", timeout=2)
+                    self.notify(self._t("export_error", err=e), timeout=2)
             else:
-                self.notify("No hay chat activo", timeout=2)
+                self.notify(self._t("no_active_chat"), timeout=2)
 
         elif cmd == "/compact":
-            self.notify(
-                "Consejo: conversaciones largas usan mas contexto. "
-                "Usa /clear para empezar de nuevo, o /reset para reiniciar el contador.",
-                timeout=5,
-            )
+            self.notify(self._t("compact_tip"), timeout=5)
 
         elif cmd == "/restart":
             self.exit()
@@ -1460,12 +1894,12 @@ class TermApp(App):
                 browser_app = self._default_browser
                 open_url = url or "https://www.google.com"
                 subprocess.Popen(["open", "-a", browser_app, open_url])
-                self.notify(f"Abriendo {browser_app}...", timeout=1)
+                self.notify(self._t("opening", name=browser_app), timeout=1)
             elif len(self._browsers) == 1:
                 # Only one browser, use it
                 open_url = url or "https://www.google.com"
                 subprocess.Popen(["open", "-a", self._browsers[0]["app"], open_url])
-                self.notify(f"Abriendo {self._browsers[0]['name']}...", timeout=1)
+                self.notify(self._t("opening", name=self._browsers[0]["name"]), timeout=1)
             elif len(self._browsers) > 1:
                 # Show selector
                 self._pending_browse_url = url
@@ -1475,10 +1909,10 @@ class TermApp(App):
                 try:
                     msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
                     await msgs.mount(Static(
-                        "[bold]Selecciona navegador:[/]\n\n"
+                        f"[bold]{self._t('select_browser')}:[/]\n\n"
                         + "\n".join(items)
-                        + f"\n\n[dim]Escribe el numero (1-{len(self._browsers)}) o el nombre[/]"
-                        + "\n[dim]Usa /browser <nombre> para establecer uno por defecto[/]",
+                        + f"\n\n[dim]{self._t('type_browser_number', n=len(self._browsers))}[/]"
+                        + f"\n[dim]{self._t('set_default_browser')}[/]",
                         classes="info-block",
                         id="browser-selector",
                     ))
@@ -1487,7 +1921,7 @@ class TermApp(App):
                     pass
                 self._awaiting_browser_selection = tab_id
             else:
-                self.notify("No se encontraron navegadores instalados", timeout=2)
+                self.notify(self._t("no_browsers"), timeout=2)
 
         elif cmd == "/browser":
             if arg:
@@ -1500,20 +1934,43 @@ class TermApp(App):
                         cfg = _load_config()
                         cfg["default_browser"] = app_name
                         _save_config(cfg)
-                        self.notify(f"Navegador por defecto: {app_name}", timeout=2)
+                        self.notify(self._t("default_browser_set", name=app_name), timeout=2)
                     else:
-                        self.notify(f"{app_name} no esta instalado", timeout=2)
+                        self.notify(self._t("not_installed", name=app_name), timeout=2)
                 else:
                     aliases = ", ".join(BROWSER_ALIASES.keys())
-                    self.notify(f"Nombres validos: {aliases}", timeout=3)
+                    self.notify(self._t("valid_names", names=aliases), timeout=3)
             else:
                 if self._default_browser:
-                    self.notify(f"Navegador actual: {self._default_browser}", timeout=2)
+                    self.notify(self._t("current_browser", name=self._default_browser), timeout=2)
                 else:
-                    self.notify("Sin navegador por defecto. Usa /browser <nombre>", timeout=2)
+                    self.notify(self._t("no_default_browser"), timeout=2)
+
+        elif cmd == "/lang":
+            if arg:
+                code = arg.lower().strip()
+                if code in LANGUAGES:
+                    self._lang = code
+                    self._persist_config()
+                    self._refresh_status()
+                    self.notify(self._t("lang_set", lang=LANGUAGES[code]), timeout=2)
+                else:
+                    self.notify(self._t("lang_invalid", code=arg), timeout=3)
+            else:
+                lines = [f"[bold]{self._t('lang_available')}:[/]\n"]
+                for code, name in LANGUAGES.items():
+                    current = f" [bold cyan]{self._t('active_marker')}[/]" if code == self._lang else ""
+                    lines.append(f"  [bold]{code}[/] - {name}{current}")
+                lines.append(f"\n[dim]{self._t('lang_usage')}[/]")
+                try:
+                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                    await msgs.mount(Static("\n".join(lines), classes="info-block"))
+                    msgs.scroll_end(animate=False)
+                except NoMatches:
+                    pass
 
         else:
-            self.notify(f"Comando desconocido: {cmd}. Prueba /help", timeout=2)
+            self.notify(self._t("unknown_cmd", cmd=cmd), timeout=2)
 
     # ------------------------------------------------------------ tab management
 
@@ -1531,7 +1988,7 @@ class TermApp(App):
         await tc.add_pane(pane)
         await pane.mount(chat)
         tc.active = f"pane-{tab_id}"
-        self._set_nav_active("chat")
+        self._update_tab_labels()
 
         await asyncio.sleep(0.1)
         try:
@@ -1544,7 +2001,7 @@ class TermApp(App):
 
     async def action_close_tab(self) -> None:
         if len(self._tabs) <= 1:
-            self.notify("No se puede cerrar la ultima tab", timeout=1)
+            self.notify(self._t("cannot_close_last"), timeout=1)
             return
         tc = self.query_one("#main-tabs", TabbedContent)
         active = tc.active
@@ -1565,6 +2022,7 @@ class TermApp(App):
                     tab.label = "Chat"
                 except Exception:
                     pass
+            self._update_tab_labels()
 
     def action_clear_tab(self) -> None:
         try:
@@ -1601,7 +2059,7 @@ class TermApp(App):
         idx = EFFORT_LEVELS.index(self.effort) if self.effort in EFFORT_LEVELS else 2
         self.effort = EFFORT_LEVELS[(idx + 1) % len(EFFORT_LEVELS)]
         self._refresh_status()
-        self.notify(f"Esfuerzo: {self.effort}", timeout=1)
+        self.notify(f"{self._t('effort_set')}: {self.effort}", timeout=1)
 
     # ------------------------------------------------------------ AI execution
 
@@ -1609,6 +2067,7 @@ class TermApp(App):
     async def _run_ai(self, chat: ChatTab, prompt: str) -> None:
         model = AI_MODELS.get(chat.model_key, AI_MODELS["claude"])
         full_output = ""
+        system_context = _build_system_context(self._lang)
 
         try:
             cmd_line = (
@@ -1616,7 +2075,7 @@ class TermApp(App):
                 + [prompt]
                 + model["args"]
                 + ["--effort", self.effort]
-                + ["--append-system-prompt", SYSTEM_CONTEXT]
+                + ["--append-system-prompt", system_context]
             )
 
             chat.proc = await asyncio.create_subprocess_exec(
