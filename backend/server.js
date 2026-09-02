@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const { spawn } = require('child_process');
-const path = require('path');
 
 const app = express();
 const PORT = 3001;
@@ -9,12 +8,22 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Health check
+const SYSTEM_CONTEXT = `You are Term, a terminal AI assistant. You can control this macOS computer.
+When the user asks you to open apps, change songs, adjust volume, etc., use osascript/AppleScript.
+
+Examples:
+- Open Safari: osascript -e 'tell application "Safari" to activate'
+- Play/pause Spotify: osascript -e 'tell application "Spotify" to playpause'
+- Next song: osascript -e 'tell application "Spotify" to next track'
+- Set volume: osascript -e 'set volume output volume 50'
+- Open any app: open -a "App Name"
+
+You have full shell access. Execute commands directly. Be concise.`;
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Chat endpoint - streams Claude Code output
 app.post('/api/chat', (req, res) => {
   const { message, workdir, model, effort } = req.body;
 
@@ -27,14 +36,15 @@ app.post('/api/chat', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const cwd = workdir || process.env.HOME;
+  const fullPrompt = SYSTEM_CONTEXT + '\n\nUser request: ' + message;
+  const args = ['-p', fullPrompt, '--max-turns', '15'];
 
-  const args = ['-p', message, '--max-turns', '15'];
   if (model && model !== 'claude') {
     const modelMap = { 'claude-opus': 'opus', 'claude-haiku': 'haiku' };
     const m = modelMap[model];
     if (m) args.push('--model', m);
   }
-  if (effort && effort !== 'high') {
+  if (effort) {
     args.push('--effort', effort);
   }
 
@@ -45,21 +55,21 @@ app.post('/api/chat', (req, res) => {
   });
 
   let fullOutput = '';
+  let tokenEstimate = 0;
 
   claude.stdout.on('data', (data) => {
     const text = data.toString();
     fullOutput += text;
-    res.write(`data: ${JSON.stringify({ type: 'chunk', content: text })}\n\n`);
+    tokenEstimate += text.split(/\s+/).length * 2;
+    res.write(`data: ${JSON.stringify({ type: 'chunk', content: text, tokens: tokenEstimate })}\n\n`);
   });
 
   claude.stderr.on('data', (data) => {
-    const text = data.toString();
-    // Claude CLI writes progress to stderr, forward it
-    res.write(`data: ${JSON.stringify({ type: 'status', content: text })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'status', content: data.toString() })}\n\n`);
   });
 
   claude.on('close', (code) => {
-    res.write(`data: ${JSON.stringify({ type: 'done', exitCode: code })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done', exitCode: code, tokens: tokenEstimate })}\n\n`);
     res.end();
   });
 
@@ -68,35 +78,7 @@ app.post('/api/chat', (req, res) => {
     res.end();
   });
 
-  // Handle client disconnect
-  req.on('close', () => {
-    claude.kill();
-  });
-});
-
-// List files in a directory
-app.get('/api/files', (req, res) => {
-  const dir = req.query.path || process.env.HOME;
-  const { execSync } = require('child_process');
-  try {
-    const output = execSync(`ls -la "${dir}"`, { encoding: 'utf-8' });
-    res.json({ path: dir, content: output });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Read a file
-app.get('/api/file', (req, res) => {
-  const filePath = req.query.path;
-  if (!filePath) return res.status(400).json({ error: 'path required' });
-  const fs = require('fs');
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    res.json({ path: filePath, content });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  req.on('close', () => { claude.kill(); });
 });
 
 app.listen(PORT, () => {

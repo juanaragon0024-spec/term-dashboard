@@ -5,42 +5,39 @@ import { Sidebar } from './components/Sidebar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { AppsPanel } from './components/AppsPanel'
 import { ToolsPanel } from './components/ToolsPanel'
+import { HelpPanel } from './components/HelpPanel'
 import { themes, type ThemeKey } from './themes'
 
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  timestamp: Date
 }
 
 export interface ChatTabData {
   id: string
+  name: string
   model: string
   modelName: string
   messages: Message[]
   isLoading: boolean
 }
 
-const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const
 type Effort = (typeof EFFORT_LEVELS)[number]
 
 function App() {
   const [tabs, setTabs] = useState<ChatTabData[]>([
-    { id: 'tab-1', model: 'claude', modelName: 'Claude', messages: [], isLoading: false },
+    { id: 'tab-1', name: 'Chat 1', model: 'claude', modelName: 'Claude', messages: [], isLoading: false },
   ])
   const [activeTabId, setActiveTabId] = useState('tab-1')
-  const [activePanel, setActivePanel] = useState<'chat' | 'settings' | 'apps' | 'tools'>('chat')
-  const [theme, setTheme] = useState<ThemeKey>(
-    () => (localStorage.getItem('term-theme') as ThemeKey) || 'neon'
-  )
-  const [effort, setEffort] = useState<Effort>(
-    () => (localStorage.getItem('term-effort') as Effort) || 'high'
-  )
-  const [workdir, setWorkdir] = useState(
-    () => localStorage.getItem('term-workdir') || ''
-  )
+  const [activePanel, setActivePanel] = useState<'chat' | 'settings' | 'apps' | 'tools' | 'help'>('chat')
+  const [theme, setTheme] = useState<ThemeKey>(() => (localStorage.getItem('term-theme') as ThemeKey) || 'neon')
+  const [effort, setEffort] = useState<Effort>(() => (localStorage.getItem('term-effort') as Effort) || 'high')
+  const [workdir, setWorkdir] = useState(() => localStorage.getItem('term-workdir') || '')
   const [defaultModel, setDefaultModel] = useState('claude')
+  const [contextTokens, setContextTokens] = useState(0)
+  const maxContext = 200000
   const tabCounter = useRef(1)
   const abortRefs = useRef<Record<string, AbortController>>({})
 
@@ -56,16 +53,13 @@ function App() {
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
 
-  const addTab = useCallback(() => {
+  const addTab = useCallback((name?: string) => {
     tabCounter.current++
-    const models: Record<string, string> = {
-      claude: 'Claude',
-      'claude-opus': 'Claude Opus',
-      'claude-haiku': 'Claude Haiku',
-    }
+    const models: Record<string, string> = { claude: 'Claude', 'claude-opus': 'Claude Opus', 'claude-haiku': 'Claude Haiku' }
     const id = `tab-${tabCounter.current}`
     const newTab: ChatTabData = {
       id,
+      name: name || `Chat ${tabCounter.current}`,
       model: defaultModel,
       modelName: models[defaultModel] || 'Claude',
       messages: [],
@@ -79,14 +73,20 @@ function App() {
   const closeTab = useCallback((tabId: string) => {
     if (tabs.length <= 1) return
     abortRefs.current[tabId]?.abort()
-    setTabs((prev) => prev.filter((t) => t.id !== tabId))
-    if (activeTabId === tabId) {
-      setActiveTabId(tabs.find((t) => t.id !== tabId)?.id || tabs[0].id)
-    }
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== tabId)
+      if (activeTabId === tabId && next.length > 0) setActiveTabId(next[0].id)
+      return next
+    })
   }, [tabs, activeTabId])
+
+  const renameTab = useCallback((tabId: string, name: string) => {
+    setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name } : t))
+  }, [])
 
   const clearTab = useCallback((tabId: string) => {
     setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, messages: [] } : t))
+    setContextTokens(0)
   }, [])
 
   const cycleEffort = useCallback(() => {
@@ -97,31 +97,18 @@ function App() {
   }, [])
 
   const sendMessage = useCallback(async (text: string, tabId: string) => {
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text,
-      timestamp: new Date(),
-    }
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text }
     const assistantId = crypto.randomUUID()
-    const assistantMsg: Message = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-    }
+    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '' }
 
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === tabId
-          ? { ...t, messages: [...t.messages, userMsg, assistantMsg], isLoading: true }
-          : t
-      )
-    )
+    setTabs((prev) => prev.map((t) =>
+      t.id === tabId ? { ...t, messages: [...t.messages, userMsg, assistantMsg], isLoading: true } : t
+    ))
 
     try {
       const controller = new AbortController()
       abortRefs.current[tabId] = controller
+      const tab = tabs.find((t) => t.id === tabId)
 
       const res = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
@@ -129,7 +116,7 @@ function App() {
         body: JSON.stringify({
           message: text,
           workdir: workdir || undefined,
-          model: tabs.find((t) => t.id === tabId)?.model,
+          model: tab?.model,
           effort,
         }),
         signal: controller.signal,
@@ -148,65 +135,42 @@ function App() {
           try {
             const data = JSON.parse(line.slice(6))
             if (data.type === 'chunk') {
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.id === tabId
-                    ? {
-                        ...t,
-                        messages: t.messages.map((m) =>
-                          m.id === assistantId
-                            ? { ...m, content: m.content + data.content }
-                            : m
-                        ),
-                      }
-                    : t
-                )
-              )
+              setTabs((prev) => prev.map((t) =>
+                t.id === tabId
+                  ? { ...t, messages: t.messages.map((m) => m.id === assistantId ? { ...m, content: m.content + data.content } : m) }
+                  : t
+              ))
+              if (data.tokens) setContextTokens(data.tokens)
             }
           } catch {}
         }
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  messages: t.messages.map((m) =>
-                    m.id === assistantId
-                      ? { ...m, content: 'Error de conexion con el backend.' }
-                      : m
-                  ),
-                }
-              : t
-          )
-        )
+        setTabs((prev) => prev.map((t) =>
+          t.id === tabId
+            ? { ...t, messages: t.messages.map((m) => m.id === assistantId ? { ...m, content: 'Error de conexion con el backend.' } : m) }
+            : t
+        ))
       }
     } finally {
       delete abortRefs.current[tabId]
-      setTabs((prev) =>
-        prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t))
-      )
+      setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t)))
     }
   }, [workdir, effort, tabs])
 
   const stopGeneration = useCallback((tabId: string) => {
     abortRefs.current[tabId]?.abort()
-    setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t))
-    )
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t)))
   }, [])
+
+  const contextPct = Math.min(100, Math.round(contextTokens / maxContext * 100))
+
+  const models: Record<string, string> = { claude: 'Claude', 'claude-opus': 'Claude Opus', 'claude-haiku': 'Claude Haiku' }
 
   return (
     <div className="app">
-      <Sidebar
-        activePanel={activePanel}
-        onPanelChange={setActivePanel}
-        effort={effort}
-        onCycleEffort={cycleEffort}
-        theme={theme}
-      />
+      <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />
       <div className="main-area">
         {/* Tab bar */}
         <div className="tab-bar">
@@ -216,23 +180,13 @@ function App() {
               className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
               onClick={() => { setActiveTabId(tab.id); setActivePanel('chat') }}
             >
-              <span className="tab-name">{tab.modelName}</span>
+              <span className="tab-name">{tab.name}</span>
               {tabs.length > 1 && (
-                <button
-                  className="tab-close"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
-                >
-                  x
-                </button>
+                <button className="tab-close" onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}>x</button>
               )}
             </div>
           ))}
-          <button className="tab-add" onClick={addTab}>+</button>
-          <div className="tab-bar-right">
-            <button className="effort-btn" onClick={cycleEffort}>
-              Effort: {effort}
-            </button>
-          </div>
+          <button className="tab-add" onClick={() => addTab()}>+</button>
         </div>
 
         {/* Panels */}
@@ -248,18 +202,29 @@ function App() {
         )}
         {activePanel === 'settings' && (
           <SettingsPanel
-            theme={theme}
-            onThemeChange={setTheme}
-            workdir={workdir}
-            onWorkdirChange={setWorkdir}
-            defaultModel={defaultModel}
-            onDefaultModelChange={setDefaultModel}
-            effort={effort}
-            onEffortChange={setEffort}
+            theme={theme} onThemeChange={setTheme}
+            workdir={workdir} onWorkdirChange={setWorkdir}
+            defaultModel={defaultModel} onDefaultModelChange={setDefaultModel}
+            effort={effort} onEffortChange={setEffort}
           />
         )}
         {activePanel === 'apps' && <AppsPanel />}
         {activePanel === 'tools' && <ToolsPanel />}
+        {activePanel === 'help' && <HelpPanel />}
+
+        {/* Status bar */}
+        <div className="status-bar">
+          <span className="status-item effort" onClick={cycleEffort}>
+            Effort: {effort}
+          </span>
+          <span className="status-item context">
+            Contexto: <span className="context-bar">{'█'.repeat(Math.round(contextPct / 100 * 15))}{'░'.repeat(15 - Math.round(contextPct / 100 * 15))}</span> {contextPct}% ({contextTokens.toLocaleString()}/{maxContext.toLocaleString()})
+          </span>
+          <span className="status-item model">
+            {models[activeTab?.model || 'claude'] || 'Claude'}
+          </span>
+          {workdir && <span className="status-item workdir">{workdir.length > 30 ? '...' + workdir.slice(-27) : workdir}</span>}
+        </div>
       </div>
     </div>
   )

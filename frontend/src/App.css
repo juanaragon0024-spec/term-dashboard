@@ -659,3 +659,111 @@ body {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
 }
+
+/* ── Status bar ── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 20px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 0.6rem;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+}
+
+.status-item {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.status-item.effort {
+  color: var(--accent4);
+  cursor: pointer;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-item.effort:hover {
+  color: var(--accent1);
+}
+
+.status-item.context {
+  color: var(--accent1);
+}
+
+.context-bar {
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -1px;
+  font-size: 0.55rem;
+}
+
+.status-item.model {
+  color: var(--accent2);
+  font-weight: 600;
+}
+
+.status-item.workdir {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Help panel ── */
+.help-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.help-panel .ascii-logo {
+  margin-bottom: 24px;
+}
+
+.help-panel .ascii-logo pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent1));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+  margin: 0;
+}
+
+.help-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+
+.help-subtitle {
+  font-size: 0.85rem;
+  color: var(--accent2);
+  margin: 20px 0 8px 0;
+}
+
+.help-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.shortcut {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+}
+
+.shortcut .key {
+  color: var(--accent1);
+  font-weight: 700;
+  margin-right: 6px;
+}
