@@ -1382,12 +1382,12 @@ class TermApp(App):
         full_output = ""
 
         try:
-            full_prompt = SYSTEM_CONTEXT + "\n\nUser request: " + prompt
             cmd_line = (
                 model["cmd"]
-                + [full_prompt]
+                + [prompt]
                 + model["args"]
                 + ["--effort", self.effort]
+                + ["--append-system-prompt", SYSTEM_CONTEXT]
             )
 
             chat.proc = await asyncio.create_subprocess_exec(
