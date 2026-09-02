@@ -772,17 +772,10 @@ Screen {
     width: 1fr;
     padding: 0 1;
 }
-.theme-btn {
-    background: $bg3;
-    color: $accent1;
-    border: none;
-    padding: 0 2;
-    min-width: 16;
+#theme-label {
+    color: $muted;
     dock: right;
-}
-.theme-btn:hover {
-    background: $accent1;
-    color: $bg1;
+    padding: 0 2;
 }
 
 /* -- Main area -- */
@@ -880,15 +873,15 @@ Underline {
     dock: bottom;
     height: 3;
     background: $bg1;
-    padding: 0 12;
+    padding: 0 25%;
 }
 .input-bar Input {
-    background: $bg3;
+    background: $bg1;
     color: $text;
-    border: tall $border;
+    border: none;
 }
 .input-bar Input:focus {
-    border: tall $accent1;
+    border: none;
 }
 
 /* -- Command suggestions -- */
@@ -1237,7 +1230,7 @@ class TermApp(App):
         theme_name = THEMES.get(self.theme_key, THEMES["neon"])["name"]
         yield Horizontal(
             Label("[bold]TERM[/]", id="top-bar-title"),
-            Button(f"[ {theme_name} ]", classes="theme-btn", id="theme-cycle-btn"),
+            Label(f"Tema: {theme_name}", id="theme-label"),
             id="top-bar",
         )
         with Horizontal(id="main"):
@@ -1348,7 +1341,7 @@ class TermApp(App):
         # Update theme button label
         try:
             theme_name = THEMES.get(value, THEMES["neon"])["name"]
-            self.query_one("#theme-cycle-btn", Button).label = f"[ {theme_name} ]"
+            self.query_one("#theme-label", Label).update(f"Tema: {theme_name}")
         except NoMatches:
             pass
         # Force full CSS refresh
@@ -1586,16 +1579,6 @@ class TermApp(App):
 
     def _show_panel_sync(self, panel: str) -> None:
         self.run_worker(self._show_panel(panel), exclusive=True)
-
-    # ------------------------------------------------------------ button handler
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        bid = event.button.id or ""
-        if bid == "theme-cycle-btn":
-            keys = list(THEMES.keys())
-            idx = keys.index(self.theme_key) if self.theme_key in keys else 0
-            self.theme_key = keys[(idx + 1) % len(keys)]
-            self.notify(f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']}", timeout=1)
 
     # ------------------------------------------------------------ input handler
 
