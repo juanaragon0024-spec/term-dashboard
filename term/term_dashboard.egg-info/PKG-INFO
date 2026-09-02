@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: term-dashboard
+Version: 0.1.0
+Summary: Term -- TUI dashboard for Claude Code. Vivid syntax highlighting, dark theme, CLI OAuth.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: textual>=3.0
+Requires-Dist: rich>=13.0
+
+# Term
+
+TUI dashboard para Claude Code. Colores vivos, syntax highlighting, tema oscuro neon.
+
+## Instalar
+
+```bash
+cd term
+pip install -e .
+```
+
+## Usar
+
+```bash
+term
+```
+
+O con un directorio de trabajo:
+
+```bash
+term --workdir ~/mi-proyecto
+```
+
+Usa el OAuth de Claude Code que ya tengas configurado (`claude` CLI).
