@@ -209,6 +209,7 @@ def _load_config() -> dict:
         "workdir": str(Path.home()),
         "effort": "high",
         "model": "claude",
+        "permissions_granted": False,
     }
 
 
@@ -582,6 +583,8 @@ class TermApp(App):
         self._max_context = 200_000
         self._awaiting_model_selection: str | None = None
         self._pending_new_tab_name: str | None = None
+        self._permissions_granted: bool = cfg.get("permissions_granted", False)
+        self._awaiting_permissions = False
 
     # ----------------------------------------------------- CSS variables (COMPLETE)
 
@@ -717,10 +720,49 @@ class TermApp(App):
 
     def on_mount(self) -> None:
         self._refresh_status()
+        if not self._permissions_granted:
+            self._show_permissions_dialog()
+        else:
+            try:
+                first = next(iter(self._tabs.values()))
+                self.query_one(f"#input-{first.tab_id}", Input).focus()
+            except (NoMatches, StopIteration):
+                pass
+
+    def _show_permissions_dialog(self) -> None:
+        self._awaiting_permissions = True
+        first_tab = next(iter(self._tabs.values()), None)
+        if not first_tab:
+            return
         try:
-            first = next(iter(self._tabs.values()))
-            self.query_one(f"#input-{first.tab_id}", Input).focus()
-        except (NoMatches, StopIteration):
+            msgs = self.query_one(f"#msgs-{first_tab.tab_id}", VerticalScroll)
+            # Remove empty state
+            try:
+                self.query_one(f"#empty-{first_tab.tab_id}").remove()
+            except NoMatches:
+                pass
+            self.call_after_refresh(lambda: self._mount_permissions(msgs, first_tab))
+        except NoMatches:
+            pass
+
+    def _mount_permissions(self, msgs: VerticalScroll, tab: ChatTab) -> None:
+        perm_text = (
+            "[bold]Term necesita permisos para funcionar correctamente.[/]\n\n"
+            "Al aceptar, Term podra:\n\n"
+            "  [bold]Aplicaciones[/]     Abrir y controlar apps (Safari, Spotify, etc.)\n"
+            "  [bold]Archivos[/]         Leer y escribir archivos en tu directorio de trabajo\n"
+            "  [bold]Sistema[/]          Ajustar volumen, ejecutar comandos shell\n"
+            "  [bold]Configuracion[/]    Guardar preferencias en ~/.config/term/\n"
+            "  [bold]Red[/]              Conectar con Claude Code CLI via OAuth\n\n"
+            "Todos los comandos se ejecutan localmente en tu maquina.\n"
+            "Claude Code usa tu autenticacion OAuth existente.\n\n"
+            "[bold]Aceptar permisos? (s/n)[/]"
+        )
+        msgs.mount(Static(perm_text, classes="info-block", id="perm-dialog"))
+        msgs.scroll_end(animate=False)
+        try:
+            self.query_one(f"#input-{tab.tab_id}", Input).focus()
+        except NoMatches:
             pass
 
     # ------------------------------------------------------------ helpers
@@ -926,6 +968,37 @@ class TermApp(App):
             return
 
         tab_id = iid.replace("input-", "")
+
+        # Permissions dialog response
+        if self._awaiting_permissions:
+            event.input.value = ""
+            self._awaiting_permissions = False
+            try:
+                self.query_one("#perm-dialog").remove()
+            except NoMatches:
+                pass
+            if text.lower() in ("s", "si", "y", "yes", "1"):
+                self._permissions_granted = True
+                cfg = _load_config()
+                cfg["permissions_granted"] = True
+                _save_config(cfg)
+                self.notify("Permisos concedidos", timeout=2)
+                first_tab = next(iter(self._tabs.values()), None)
+                if first_tab:
+                    try:
+                        msgs = self.query_one(f"#msgs-{first_tab.tab_id}", VerticalScroll)
+                        logo = _build_logo(self.theme_key)
+                        model = AI_MODELS.get(first_tab.model_key, AI_MODELS["claude"])
+                        await msgs.mount(Static(
+                            logo + "\n\n"
+                            f"[dim]{model['name']} | Type a message or /help for commands[/]",
+                            classes="info-block",
+                        ))
+                    except NoMatches:
+                        pass
+            else:
+                self.notify("Permisos denegados -- funciones de sistema desactivadas", timeout=3)
+            return
 
         # Model selection flow for /new
         if self._awaiting_model_selection == tab_id:
