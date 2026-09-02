@@ -36,8 +36,7 @@ app.post('/api/chat', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const cwd = workdir || process.env.HOME;
-  const fullPrompt = SYSTEM_CONTEXT + '\n\nUser request: ' + message;
-  const args = ['-p', fullPrompt, '--max-turns', '15'];
+  const args = ['-p', message, '--max-turns', '15', '--append-system-prompt', SYSTEM_CONTEXT];
 
   if (model && model !== 'claude') {
     const modelMap = { 'claude-opus': 'opus', 'claude-haiku': 'haiku' };
@@ -51,7 +50,6 @@ app.post('/api/chat', (req, res) => {
   const claude = spawn('claude', args, {
     cwd,
     env: { ...process.env },
-    shell: true,
   });
 
   let fullOutput = '';

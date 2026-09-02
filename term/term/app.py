@@ -572,21 +572,21 @@ class TermApp(App):
     # ------------------------------------------------------------------ init
 
     def __init__(self, workdir: str = "", theme: str = "") -> None:
+        self._context_tokens = 0
+        self._max_context = 200_000
+        self._tabs: dict[str, ChatTab] = {}
+        self._apps = _detect_apps()
+        self._active_panel = "chat"
+        self._awaiting_model_selection: str | None = None
+        self._pending_new_tab_name: str | None = None
+        self._awaiting_permissions = False
         super().__init__()
         cfg = _load_config()
         self.workdir: str = workdir or cfg.get("workdir", str(Path.home()))
         self.theme_key = theme or cfg.get("theme", "neon")
         self.effort = cfg.get("effort", "high")
         self.current_model = cfg.get("model", "claude")
-        self._tabs: dict[str, ChatTab] = {}
-        self._apps = _detect_apps()
-        self._active_panel = "chat"
-        self._context_tokens = 0
-        self._max_context = 200_000
-        self._awaiting_model_selection: str | None = None
-        self._pending_new_tab_name: str | None = None
         self._permissions_granted: bool = cfg.get("permissions_granted", False)
-        self._awaiting_permissions = False
 
     # ----------------------------------------------------- CSS variables (COMPLETE)
 
