@@ -879,17 +879,15 @@ Underline {
 .input-bar {
     dock: bottom;
     height: auto;
-    max-height: 8;
-    background: $bg2;
+    max-height: 5;
+    background: $bg1;
     border-top: solid $border;
-    padding: 1 8 0 8;
-    margin: 0 8;
+    padding: 1 15 0 15;
 }
 .input-bar Input {
     background: $bg3;
     color: $text;
     border: tall $border;
-    height: 3;
 }
 .input-bar Input:focus {
     border: tall $accent1;
@@ -960,6 +958,10 @@ Footer {
     background: $bg2;
     border-left: solid $border;
     padding: 1;
+    display: none;
+}
+#file-panel.visible {
+    display: block;
 }
 #file-panel-title {
     color: $accent1;
@@ -1335,10 +1337,12 @@ class TermApp(App):
             self.query_one("#theme-cycle-btn", Button).label = f"[ {theme_name} ]"
         except NoMatches:
             pass
-        # Re-apply CSS variables and reparse
-        self.stylesheet.set_variables(self.get_css_variables())
+        # Force full CSS refresh
+        new_vars = self.get_css_variables()
+        self.stylesheet.set_variables(new_vars)
         self.stylesheet.reparse()
-        self.refresh(layout=True)
+        self.screen._update_styles()
+        self.screen.refresh(layout=True)
 
     # ------------------------------------------------------------ helpers
 
@@ -2092,8 +2096,13 @@ class TermApp(App):
                     pass
 
         elif cmd == "/files":
-            self._refresh_file_panel()
-            self.notify("File panel refreshed", timeout=1)
+            try:
+                fp = self.query_one("#file-panel")
+                fp.toggle_class("visible")
+                if fp.has_class("visible"):
+                    self._refresh_file_panel()
+            except NoMatches:
+                pass
 
         elif cmd == "/attach":
             if arg:
