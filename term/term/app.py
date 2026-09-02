@@ -139,11 +139,22 @@ COMMANDS_HELP = {
     "/close":           "Cerrar pestana activa",
     "/clear":           "Limpiar chat",
     "/save":            "Guardar configuracion",
-    "/help":            "Mostrar esta ayuda",
+    "/help":            "Mostrar ayuda completa",
     "/apps":            "Ir al panel de apps",
     "/tools":           "Ir al panel de herramientas",
     "/settings":        "Ir al panel de configuracion",
     "/about":           "Info sobre Term",
+    "/models":          "Listar modelos disponibles con estado",
+    "/themes":          "Listar temas disponibles",
+    "/status":          "Mostrar estado actual (tema, modelo, effort, workdir)",
+    "/reset":           "Resetear contexto estimado a 0",
+    "/version":         "Version de Term",
+    "/open <app>":      "Abrir una aplicacion (ej: /open Safari)",
+    "/run <comando>":   "Ejecutar comando shell y mostrar resultado",
+    "/volume <0-100>":  "Ajustar volumen del sistema",
+    "/play":            "Play/pause Spotify",
+    "/next":            "Siguiente cancion Spotify",
+    "/prev":            "Cancion anterior Spotify",
     "ctrl+t":           "Nueva pestana",
     "ctrl+w":           "Cerrar pestana",
     "ctrl+l":           "Limpiar chat",
@@ -542,91 +553,79 @@ class TermApp(App):
 
     def get_css_variables(self) -> dict[str, str]:
         t = THEMES.get(self.theme_key, THEMES["neon"])
+        bg1, bg2, bg3 = t["bg1"], t["bg2"], t["bg3"]
+        brd, a1, a2, a3, a4 = t["border"], t["accent1"], t["accent2"], t["accent3"], t["accent4"]
+        txt, mut = t["text"], t["muted"]
         return {
-            # Textual core variables
-            "background": t["bg1"],
-            "foreground": t["text"],
-            "panel": t["bg2"],
-            "surface": t["bg2"],
-            "primary": t["accent1"],
-            "secondary": t["accent2"],
-            "accent": t["accent3"],
-            "warning": t["accent4"],
-            "error": t["accent2"],
-            "success": t["accent3"],
-            "boost": t["bg3"],
-            "border": t["border"],
-            # Screen selection
-            "screen-selection-background": t["accent1"],
-            "screen-selection-foreground": t["bg1"],
+            "background": bg1, "foreground": txt, "panel": bg2, "surface": bg2,
+            "primary": a1, "secondary": a2, "accent": a3,
+            "warning": a4, "error": a2, "success": a3, "boost": bg3,
+            "border": brd, "border-blurred": brd,
+            # Darken/lighten variants
+            "foreground-darken-1": mut, "foreground-muted": mut,
+            "panel-darken-1": bg1, "panel-darken-2": bg1, "panel-lighten-1": bg3,
+            "surface-darken-1": bg1, "surface-lighten-1": bg3,
+            "surface-lighten-2": bg3, "surface-lighten-3": bg3,
+            "primary-darken-2": a1, "primary-darken-3": a1, "primary-lighten-3": a1,
+            "accent-darken-1": a3,
+            "error-darken-1": a2, "error-darken-2": a2, "error-darken-3": a2, "error-lighten-2": a2,
+            "success-darken-2": a3, "success-darken-3": a3,
+            "success-lighten-1": a3, "success-lighten-2": a3,
+            "warning-darken-1": a4, "warning-darken-2": a4,
+            "warning-darken-3": a4, "warning-lighten-2": a4, "warning-text": bg1,
+            # Muted
+            "primary-muted": mut, "secondary-muted": mut, "accent-muted": mut,
+            "error-muted": mut, "success-muted": mut, "warning-muted": mut,
+            # Screen
+            "screen-selection-background": a1, "screen-selection-foreground": bg1,
             # Input
-            "input-cursor-background": t["accent1"],
-            "input-cursor-foreground": t["bg1"],
+            "input-cursor-background": a1, "input-cursor-foreground": bg1,
             "input-cursor-text-style": "bold",
-            "input-selection-background": t["accent1"],
-            "input-selection-foreground": t["bg1"],
+            "input-selection-background": a1, "input-selection-foreground": bg1,
             # Block cursor
-            "block-cursor-background": t["accent1"],
-            "block-cursor-foreground": t["bg1"],
+            "block-cursor-background": a1, "block-cursor-foreground": bg1,
             "block-cursor-text-style": "bold",
-            "block-cursor-blurred-background": t["muted"],
-            "block-cursor-blurred-foreground": t["text"],
-            "block-cursor-blurred-text-style": "none",
-            "block-hover-background": t["bg3"],
+            "block-cursor-blurred-background": mut, "block-cursor-blurred-foreground": txt,
+            "block-cursor-blurred-text-style": "none", "block-hover-background": bg3,
             # Scrollbar
-            "scrollbar": t["border"],
-            "scrollbar-hover": t["accent1"],
-            "scrollbar-active": t["accent1"],
-            "scrollbar-background": t["bg1"],
-            "scrollbar-background-hover": t["bg1"],
-            "scrollbar-background-active": t["bg1"],
-            "scrollbar-corner-color": t["bg1"],
+            "scrollbar": brd, "scrollbar-hover": a1, "scrollbar-active": a1,
+            "scrollbar-background": bg1, "scrollbar-background-hover": bg1,
+            "scrollbar-background-active": bg1, "scrollbar-corner-color": bg1,
             # Footer
-            "footer-background": t["bg2"],
-            "footer-foreground": t["muted"],
-            "footer-key-background": t["bg3"],
-            "footer-key-foreground": t["accent1"],
-            "footer-description-background": t["bg2"],
-            "footer-description-foreground": t["muted"],
-            "footer-item-background": t["bg2"],
+            "footer-background": bg2, "footer-foreground": mut,
+            "footer-key-background": bg3, "footer-key-foreground": a1,
+            "footer-description-background": bg2, "footer-description-foreground": mut,
+            "footer-item-background": bg2,
             # Button
-            "button-foreground": t["text"],
-            "button-color-foreground": t["text"],
+            "button-foreground": txt, "button-color-foreground": txt,
             "button-focus-text-style": "bold",
             # Link
-            "link-background": "transparent",
-            "link-background-hover": t["bg3"],
-            "link-color": t["accent1"],
-            "link-color-hover": t["accent1"],
-            "link-style": "underline",
-            "link-style-hover": "bold underline",
+            "link-background": "transparent", "link-background-hover": bg3,
+            "link-color": a1, "link-color-hover": a1,
+            "link-style": "underline", "link-style-hover": "bold underline",
             # Text
-            "text": t["text"],
-            "text-muted": t["muted"],
-            "text-disabled": t["muted"],
-            "text-accent": t["accent1"],
-            "text-primary": t["accent1"],
-            "text-secondary": t["accent2"],
-            "text-success": t["accent3"],
-            "text-warning": t["accent4"],
-            "text-error": t["accent2"],
+            "text": txt, "text-muted": mut, "text-disabled": mut,
+            "text-accent": a1, "text-primary": a1, "text-secondary": a2,
+            "text-success": a3, "text-warning": a4, "text-error": a2,
             # ANSI
-            "ansi-background": t["bg1"],
-            "ansi-foreground": t["text"],
-            # Markdown
-            "markdown-h": t["accent2"],
-            # Muted variants
-            "primary-muted": t["muted"],
-            "secondary-muted": t["muted"],
-            "accent-muted": t["muted"],
-            "error-muted": t["muted"],
-            "success-muted": t["muted"],
-            "warning-muted": t["muted"],
+            "ansi-background": bg1, "ansi-foreground": txt,
+            # Markdown headings
+            "markdown-h1-color": a2, "markdown-h1-background": "transparent",
+            "markdown-h1-text-style": "bold",
+            "markdown-h2-color": a2, "markdown-h2-background": "transparent",
+            "markdown-h2-text-style": "bold",
+            "markdown-h3-color": a1, "markdown-h3-background": "transparent",
+            "markdown-h3-text-style": "bold",
+            "markdown-h4-color": a1, "markdown-h4-background": "transparent",
+            "markdown-h4-text-style": "bold",
+            "markdown-h5-color": txt, "markdown-h5-background": "transparent",
+            "markdown-h5-text-style": "bold",
+            "markdown-h6-color": mut, "markdown-h6-background": "transparent",
+            "markdown-h6-text-style": "bold",
             # Custom
-            "bg1": t["bg1"], "bg2": t["bg2"], "bg3": t["bg3"],
-            "accent1": t["accent1"], "accent2": t["accent2"],
-            "accent3": t["accent3"], "accent4": t["accent4"],
-            "muted": t["muted"],
+            "bg1": bg1, "bg2": bg2, "bg3": bg3,
+            "accent1": a1, "accent2": a2, "accent3": a3, "accent4": a4,
+            "muted": mut,
         }
 
     def compose(self) -> ComposeResult:
@@ -727,45 +726,12 @@ class TermApp(App):
 
         pane = TabPane(panel.capitalize(), id=pane_id)
         await tabs.add_pane(pane)
-
-        if panel == "settings":
-            await pane.mount(self._build_settings())
-        elif panel == "apps":
-            await pane.mount(self._build_apps())
-        elif panel == "tools":
-            await pane.mount(self._build_tools())
-        elif panel == "help":
-            await pane.mount(self._build_help())
-
         tabs.active = pane_id
 
-    def _build_settings(self) -> VerticalScroll:
-        vs = VerticalScroll(classes="panel")
-        vs._nodes = []  # will be composed
-        return vs
-
-    def _build_apps(self) -> VerticalScroll:
-        vs = VerticalScroll(classes="panel")
-        return vs
-
-    def _build_tools(self) -> VerticalScroll:
-        vs = VerticalScroll(classes="panel")
-        return vs
-
-    def _build_help(self) -> VerticalScroll:
-        vs = VerticalScroll(classes="panel")
-        return vs
-
-    async def _populate_panel(self, panel: str) -> None:
-        pane_id = f"pane-{panel}"
-        try:
-            pane = self.query_one(f"#{pane_id}", TabPane)
-        except NoMatches:
-            return
-
+        # Mount content directly
         if panel == "settings":
             content = (
-                f"[bold $accent1]Configuracion[/]\n\n"
+                f"[bold]Configuracion[/]\n\n"
                 f"Tema actual: [bold]{THEMES[self.theme_key]['name']}[/]\n"
                 f"Temas: {', '.join(THEMES.keys())}\n"
                 f"Usa [bold]/theme <nombre>[/] para cambiar\n\n"
@@ -807,7 +773,6 @@ class TermApp(App):
             await pane.mount(Static("\n".join(lines), classes="panel"))
 
         elif panel == "help":
-            # Build models list with connection status
             models_info = []
             for k, m in AI_MODELS.items():
                 connected = shutil.which(m["cmd"][0]) is not None
@@ -860,13 +825,7 @@ class TermApp(App):
             self._show_panel_sync("help")
 
     def _show_panel_sync(self, panel: str) -> None:
-        self.run_worker(self._show_and_populate(panel), exclusive=True)
-
-    async def _show_and_populate(self, panel: str) -> None:
-        await self._show_panel(panel)
-        if panel != "chat":
-            await asyncio.sleep(0.05)
-            await self._populate_panel(panel)
+        self.run_worker(self._show_panel(panel), exclusive=True)
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         input_id = event.input.id or ""
@@ -909,6 +868,19 @@ class TermApp(App):
         event.input.value = ""
 
         # Handle commands
+        if text == "/":
+            # Show command list
+            cmds_only = {k: v for k, v in COMMANDS_HELP.items() if k.startswith("/")}
+            lines = ["[bold]Comandos disponibles:[/]\n"]
+            for c, d in cmds_only.items():
+                lines.append(f"  [bold]{c:28s}[/] {d}")
+            try:
+                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                await msgs.mount(Static("\n".join(lines), classes="empty-state"))
+                msgs.scroll_end(animate=False)
+            except NoMatches:
+                pass
+            return
         if text.startswith("/"):
             await self._handle_command(text, tab_id)
             return
@@ -1053,6 +1025,114 @@ class TermApp(App):
 
         elif cmd == "/about":
             self.notify("Term v0.1.0 -- Dashboard multi-IA para terminal", timeout=3)
+
+        elif cmd == "/models":
+            lines = ["[bold]Modelos disponibles:[/]\n"]
+            for i, (k, m) in enumerate(AI_MODELS.items(), 1):
+                connected = shutil.which(m["cmd"][0]) is not None
+                status = "[green]conectado[/]" if connected else "[red]desconectado[/]"
+                current = " [bold cyan]<< activo[/]" if k == self.current_model else ""
+                lines.append(f"  {i}) [bold]{m['name']}[/] ({k}) {status}{current}")
+            try:
+                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                await msgs.mount(Static("\n".join(lines), classes="empty-state"))
+                msgs.scroll_end(animate=False)
+            except NoMatches:
+                pass
+
+        elif cmd == "/themes":
+            lines = ["[bold]Temas disponibles:[/]\n"]
+            for k, t in THEMES.items():
+                current = " [bold cyan]<< activo[/]" if k == self.theme_key else ""
+                lines.append(f"  [bold]{t['name']}[/] ({k}){current}")
+            try:
+                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                await msgs.mount(Static("\n".join(lines), classes="empty-state"))
+                msgs.scroll_end(animate=False)
+            except NoMatches:
+                pass
+
+        elif cmd == "/status":
+            self.notify(
+                f"Tema: {THEMES[self.theme_key]['name']} | "
+                f"Modelo: {AI_MODELS[self.current_model]['name']} | "
+                f"Effort: {self.effort} | "
+                f"Dir: {self.workdir}",
+                timeout=5,
+            )
+
+        elif cmd == "/reset":
+            self._context_tokens = 0
+            self._update_status()
+            self.notify("Contexto reseteado", timeout=1)
+
+        elif cmd == "/version":
+            self.notify("Term v0.1.0", timeout=2)
+
+        elif cmd == "/open":
+            if arg:
+                try:
+                    subprocess.Popen(["open", "-a", arg])
+                    self.notify(f"Abriendo {arg}...", timeout=1)
+                except Exception as e:
+                    self.notify(f"Error: {e}", timeout=2)
+            else:
+                self.notify("Uso: /open <nombre de app>", timeout=2)
+
+        elif cmd == "/run":
+            if arg:
+                try:
+                    result = subprocess.run(
+                        arg, shell=True, capture_output=True, text=True, timeout=10,
+                        cwd=self.workdir,
+                    )
+                    output = result.stdout or result.stderr or "(sin output)"
+                    try:
+                        msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+                        await msgs.mount(Static(
+                            f"[dim]$ {arg}[/]\n\n{output.strip()}",
+                            classes="empty-state",
+                        ))
+                        msgs.scroll_end(animate=False)
+                    except NoMatches:
+                        pass
+                except subprocess.TimeoutExpired:
+                    self.notify("Comando excedio timeout (10s)", timeout=2)
+                except Exception as e:
+                    self.notify(f"Error: {e}", timeout=2)
+            else:
+                self.notify("Uso: /run <comando>", timeout=2)
+
+        elif cmd == "/volume":
+            if arg and arg.isdigit() and 0 <= int(arg) <= 100:
+                subprocess.run(
+                    ["osascript", "-e", f'set volume output volume {arg}'],
+                    capture_output=True,
+                )
+                self.notify(f"Volumen: {arg}%", timeout=1)
+            else:
+                self.notify("Uso: /volume <0-100>", timeout=2)
+
+        elif cmd == "/play":
+            subprocess.run(
+                ["osascript", "-e", 'tell application "Spotify" to playpause'],
+                capture_output=True,
+            )
+            self.notify("Play/Pause", timeout=1)
+
+        elif cmd == "/next":
+            subprocess.run(
+                ["osascript", "-e", 'tell application "Spotify" to next track'],
+                capture_output=True,
+            )
+            self.notify("Siguiente cancion", timeout=1)
+
+        elif cmd == "/prev":
+            subprocess.run(
+                ["osascript", "-e", 'tell application "Spotify" to previous track'],
+                capture_output=True,
+            )
+            self.notify("Cancion anterior", timeout=1)
 
         else:
             self.notify(f"Comando desconocido: {cmd}. Usa /help", timeout=2)
