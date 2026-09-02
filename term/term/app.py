@@ -722,12 +722,11 @@ class TermApp(App):
         self._refresh_status()
         if not self._permissions_granted:
             self._show_permissions_dialog()
-        else:
-            try:
-                first = next(iter(self._tabs.values()))
-                self.query_one(f"#input-{first.tab_id}", Input).focus()
-            except (NoMatches, StopIteration):
-                pass
+        try:
+            first = next(iter(self._tabs.values()))
+            self.query_one(f"#input-{first.tab_id}", Input).focus()
+        except (NoMatches, StopIteration):
+            pass
 
     def _show_permissions_dialog(self) -> None:
         self._awaiting_permissions = True
