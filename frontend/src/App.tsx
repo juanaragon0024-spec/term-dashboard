@@ -40,6 +40,12 @@ function App() {
   const maxContext = 200000
   const tabCounter = useRef(1)
   const abortRefs = useRef<Record<string, AbortController>>({})
+  // Pestaña que se está renombrando ahora mismo, y el texto a medio escribir.
+  const [editingTabId, setEditingTabId] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState('')
+  // Marca de "esto se ha cancelado", para que el blur del desmontaje no
+  // acabe guardando un nombre que el usuario ya había rechazado con Escape.
+  const renameCancelled = useRef(false)
 
   useEffect(() => {
     localStorage.setItem('term-theme', theme)
@@ -86,6 +92,30 @@ function App() {
 
   const renameTab = useCallback((tabId: string, name: string) => {
     setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, name } : t))
+  }, [])
+
+  const startRename = useCallback((tabId: string, current: string) => {
+    setEditingTabId(tabId)
+    setDraftName(current)
+  }, [])
+
+  const commitRename = useCallback(() => {
+    if (renameCancelled.current) {
+      renameCancelled.current = false
+      setEditingTabId(null)
+      return
+    }
+    if (editingTabId) {
+      const name = draftName.trim()
+      // Un nombre vacío dejaría la pestaña sin etiqueta: se descarta.
+      if (name) renameTab(editingTabId, name)
+    }
+    setEditingTabId(null)
+  }, [editingTabId, draftName, renameTab])
+
+  const cancelRename = useCallback(() => {
+    renameCancelled.current = true
+    setEditingTabId(null)
   }, [])
 
   const clearTab = useCallback((tabId: string) => {
@@ -184,8 +214,30 @@ function App() {
               className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
               onClick={() => { setActiveTabId(tab.id); setActivePanel('chat') }}
             >
-              <span className="tab-name">{tab.name}</span>
-              {tabs.length > 1 && (
+              {editingTabId === tab.id ? (
+                <input
+                  className="tab-rename"
+                  value={draftName}
+                  autoFocus
+                  spellCheck={false}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onBlur={commitRename}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
+                  }}
+                />
+              ) : (
+                <span
+                  className="tab-name"
+                  title="Doble clic para renombrar"
+                  onDoubleClick={(e) => { e.stopPropagation(); startRename(tab.id, tab.name) }}
+                >
+                  {tab.name}
+                </span>
+              )}
+              {tabs.length > 1 && editingTabId !== tab.id && (
                 <button className="tab-close" onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}>x</button>
               )}
             </div>

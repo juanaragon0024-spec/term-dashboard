@@ -53,8 +53,25 @@ export function ChatPanel({ tab, onSend, onStop, onClear, theme }: ChatPanelProp
   const gradient = themes[theme].gradient
   const gradientCSS = `linear-gradient(90deg, ${gradient[0]} 0%, ${gradient[Math.floor(gradient.length / 2)]} 50%, ${gradient[gradient.length - 1]} 100%)`
 
+  const handleClear = () => {
+    if (tab.messages.length === 0) return
+    onClear()
+  }
+
   return (
     <main className="chat-panel">
+      {tab.messages.length > 0 && (
+        <div className="chat-header">
+          <span className="chat-header-model">{tab.modelName}</span>
+          <button
+            className="chat-clear-btn"
+            onClick={handleClear}
+            title="Vaciar esta conversación"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
       <div className="messages-container">
         {tab.messages.length === 0 && (
           <div className="empty-state">
