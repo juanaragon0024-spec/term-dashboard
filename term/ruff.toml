@@ -1,0 +1,15 @@
+line-length = 96
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",    # el largo lo controla el formateador, no el linter
+    "RUF001",  # los textos traducidos llevan comillas y guiones tipograficos
+    "RUF002",
+    "RUF003",
+    "RUF012",  # BINDINGS y COMMANDS son la API de Textual, no constantes nuestras
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["SLF001"]  # los tests si comprueban el parser interno

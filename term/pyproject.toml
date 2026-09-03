@@ -4,17 +4,48 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "term-dashboard"
-version = "0.1.0"
-description = "Term -- TUI dashboard for Claude Code. Vivid syntax highlighting, dark theme, CLI OAuth."
+dynamic = ["version"]
+description = "Term -- TUI multipestaña sobre la CLI de Claude Code, con temas, sesiones y control del sistema."
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["tui", "claude", "terminal", "ai", "textual"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Utilities",
+]
 dependencies = [
     "textual>=3.0",
     "rich>=13.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
+
 [project.scripts]
 term = "term.app:main"
 
+[project.urls]
+Repository = "https://github.com/juanaragon/term-dashboard"
+
+[tool.setuptools.dynamic]
+# La version vive solo en term/version.py; antes estaba escrita en tres
+# sitios distintos y los tres decian cosas distintas.
+version = { attr = "term.version.VERSION" }
+
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["term*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"

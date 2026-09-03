@@ -1,18 +1,17 @@
-"""Term -- TUI con tabs, temas y control del sistema."""
+"""Term -- TUI multipestana sobre la CLI de Claude Code."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
+import contextlib
 import os
-import shutil
-import subprocess
+import re
 import sys
 import time
 from pathlib import Path
 
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -21,7 +20,6 @@ from textual.reactive import reactive, var
 from textual.widgets import (
     Button,
     Footer,
-    Input,
     Label,
     ListItem,
     ListView,
@@ -29,1191 +27,350 @@ from textual.widgets import (
     Static,
     TabbedContent,
     TabPane,
+    TextArea,
 )
 
-# ---------------------------------------------------------------------------
-# Logo
-# ---------------------------------------------------------------------------
-
-_LOGO = [
-    r" ████████╗ ███████╗ ██████╗  ███╗   ███╗",
-    r" ╚══██╔══╝ ██╔════╝ ██╔══██╗ ████╗ ████║",
-    r"    ██║    █████╗   ██████╔╝ ██╔████╔██║",
-    r"    ██║    ██╔══╝   ██╔══██╗ ██║╚██╔╝██║",
-    r"    ██║    ███████╗ ██║  ██║ ██║ ╚═╝ ██║",
-    r"    ╚═╝    ╚══════╝ ╚═╝  ╚═╝ ╚═╝     ╚═╝",
-]
-
-# ---------------------------------------------------------------------------
-# Themes (all with BLACK backgrounds)
-# ---------------------------------------------------------------------------
-
-THEMES: dict[str, dict] = {
-    "neon": {
-        "name": "Neon",
-        "bg1": "#050508", "bg2": "#0c0c14", "bg3": "#14142a",
-        "border": "#1e1e3a", "accent1": "#00e5ff", "accent2": "#ff00e5",
-        "accent3": "#39ff14", "accent4": "#ff6600", "text": "#e0e0ff",
-        "muted": "#444466",
-        "grad": ["#b388ff", "#9e8eff", "#8a94ff", "#759aff", "#5fa0ff",
-                 "#4aa6ff", "#34acff", "#1fb2ff", "#0abcff", "#00e5ff"],
-    },
-    "dracula": {
-        "name": "Dracula",
-        "bg1": "#1a1b26", "bg2": "#21222c", "bg3": "#343746",
-        "border": "#44475a", "accent1": "#8be9fd", "accent2": "#ff79c6",
-        "accent3": "#50fa7b", "accent4": "#ffb86c", "text": "#f8f8f2",
-        "muted": "#6272a4",
-        "grad": ["#bd93f9", "#b094f9", "#a395f9", "#9696f9", "#8997f9",
-                 "#7c98f9", "#7099f9", "#639af9", "#569bf9", "#8be9fd"],
-    },
-    "monokai": {
-        "name": "Monokai",
-        "bg1": "#1a1a18", "bg2": "#1e1f1c", "bg3": "#3e3d32",
-        "border": "#49483e", "accent1": "#66d9ef", "accent2": "#f92672",
-        "accent3": "#a6e22e", "accent4": "#fd971f", "text": "#f8f8f2",
-        "muted": "#75715e",
-        "grad": ["#ae81ff", "#a085f5", "#9289eb", "#848de1", "#7691d7",
-                 "#6895cd", "#5a99c3", "#4c9db9", "#3ea1af", "#66d9ef"],
-    },
-    "catppuccin": {
-        "name": "Catppuccin",
-        "bg1": "#11111b", "bg2": "#181825", "bg3": "#313244",
-        "border": "#45475a", "accent1": "#89dceb", "accent2": "#f5c2e7",
-        "accent3": "#a6e3a1", "accent4": "#fab387", "text": "#cdd6f4",
-        "muted": "#585b70",
-        "grad": ["#cba6f7", "#c0a8f7", "#b5aaf7", "#aaacf7", "#9faef7",
-                 "#94b0f7", "#89b2f7", "#7eb4f7", "#73b6f7", "#89dceb"],
-    },
-    "gruvbox": {
-        "name": "Gruvbox",
-        "bg1": "#0d0e0f", "bg2": "#1d2021", "bg3": "#3c3836",
-        "border": "#504945", "accent1": "#83a598", "accent2": "#d3869b",
-        "accent3": "#b8bb26", "accent4": "#fe8019", "text": "#ebdbb2",
-        "muted": "#665c54",
-        "grad": ["#d3869b", "#cd8a9d", "#c78e9f", "#c192a1", "#bb96a3",
-                 "#b59aa5", "#af9ea7", "#a9a2a9", "#93a69b", "#83a598"],
-    },
-    "tokyo": {
-        "name": "Tokyo Night",
-        "bg1": "#0f0f17", "bg2": "#16161e", "bg3": "#24283b",
-        "border": "#3b4261", "accent1": "#7dcfff", "accent2": "#bb9af7",
-        "accent3": "#9ece6a", "accent4": "#ff9e64", "text": "#c0caf5",
-        "muted": "#565f89",
-        "grad": ["#bb9af7", "#b19ef7", "#a7a2f7", "#9da6f7", "#93aaf7",
-                 "#89aef7", "#7fb2f7", "#75b6f7", "#6bbaf7", "#7dcfff"],
-    },
-}
-
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
-
-AI_MODELS: dict[str, dict] = {
-    "claude": {
-        "name": "Claude",
-        "cmd": ["claude", "-p"],
-        "args": ["--max-turns", "15"],
-    },
-    "claude-opus": {
-        "name": "Claude Opus",
-        "cmd": ["claude", "-p"],
-        "args": ["--max-turns", "15", "--model", "opus"],
-    },
-    "claude-haiku": {
-        "name": "Claude Haiku",
-        "cmd": ["claude", "-p"],
-        "args": ["--max-turns", "15", "--model", "haiku"],
-    },
-}
-
-EFFORT_LEVELS = ["low", "medium", "high", "max"]
-
-VERSION = "2.2.0"
-
-# ---------------------------------------------------------------------------
-# Languages
-# ---------------------------------------------------------------------------
-
-LANGUAGES = {
-    "es": "Espanol",
-    "en": "English",
-    "pt": "Portugues",
-    "fr": "Francais",
-    "de": "Deutsch",
-    "it": "Italiano",
-    "zh": "Chinese",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "ar": "Arabic",
-}
-
-# ---------------------------------------------------------------------------
-# Translations
-# ---------------------------------------------------------------------------
-
-TRANSLATIONS: dict[str, dict[str, str]] = {
-    "es": {
-        "effort_label": "Esfuerzo",
-        "context_label": "Contexto",
-        "model_label": "Modelo",
-        "dir_label": "Dir",
-        "processing": " Procesando...",
-        "placeholder": "Mensaje o /comando...",
-        "write_or_help": "Escribe un mensaje o /help para comandos",
-        "commands_available": "Comandos disponibles",
-        "theme_set": "Tema",
-        "themes_list": "Temas",
-        "effort_set": "Esfuerzo",
-        "levels": "Niveles",
-        "model_set": "Modelo",
-        "models_list": "Modelos",
-        "dir_set": "Dir",
-        "not_found": "No encontrado",
-        "save_done": "Configuracion guardada",
-        "about": "Term v{version}",
-        "models_available": "Modelos disponibles",
-        "themes_available": "Temas disponibles",
-        "active_marker": "<< activo",
-        "connected": "conectado",
-        "disconnected": "desconectado",
-        "context_reset": "Contexto reiniciado a 0",
-        "open_usage": "Uso: /open <nombre de app>",
-        "opening": "Abriendo {name}...",
-        "run_usage": "Uso: /run <comando>",
-        "no_output": "(sin salida)",
-        "cmd_timeout": "Comando agotado (10s)",
-        "volume_usage": "Uso: /volume <0-100>",
-        "volume_set": "Volumen: {val}%",
-        "play_pause": "Play/Pausa",
-        "next_track": "Siguiente cancion",
-        "prev_track": "Cancion anterior",
-        "copied": "Copiado al portapapeles",
-        "copy_error": "Error al copiar: {err}",
-        "no_response_copy": "No hay respuesta para copiar",
-        "messages_count": "Mensajes en esta tab: {count}",
-        "exported": "Exportado a {path}",
-        "export_error": "Error al exportar: {err}",
-        "no_active_chat": "No hay chat activo",
-        "compact_tip": "Consejo: conversaciones largas usan mas contexto. Usa /clear para empezar de nuevo, o /reset para reiniciar el contador.",
-        "cannot_close_last": "No se puede cerrar la ultima tab",
-        "unknown_cmd": "Comando desconocido: {cmd}. Prueba /help",
-        "select_model": "Selecciona modelo para la nueva tab",
-        "type_number": "Escribe el numero (1-{n}) o el nombre del modelo",
-        "invalid_model": "Modelo invalido: {text}",
-        "perms_title": "Term necesita permisos para funcionar correctamente.",
-        "perms_accept": "Al aceptar, Term podra:",
-        "perms_apps": "Aplicaciones     Abrir y controlar apps (Safari, Spotify, etc.)",
-        "perms_files": "Archivos         Leer y escribir archivos en tu directorio de trabajo",
-        "perms_system": "Sistema          Ajustar volumen, ejecutar comandos shell",
-        "perms_config": "Configuracion    Guardar preferencias en ~/.config/term/",
-        "perms_net": "Red              Conectar con la IA via OAuth",
-        "perms_local": "Todos los comandos se ejecutan localmente en tu maquina.",
-        "perms_oauth": "Term usa tu autenticacion OAuth existente.",
-        "perms_question": "Aceptar permisos? (s/n)",
-        "perms_granted": "Permisos concedidos",
-        "perms_denied": "Permisos denegados -- funciones de sistema desactivadas",
-        "select_browser": "Selecciona navegador",
-        "type_browser_number": "Escribe el numero (1-{n}) o el nombre",
-        "set_default_browser": "Usa /browser <nombre> para establecer uno por defecto",
-        "browser_not_found": "Navegador no encontrado: {text}",
-        "no_browsers": "No se encontraron navegadores instalados",
-        "default_browser_set": "Navegador por defecto: {name}",
-        "not_installed": "{name} no esta instalado",
-        "valid_names": "Nombres validos: {names}",
-        "current_browser": "Navegador actual: {name}",
-        "no_default_browser": "Sin navegador por defecto. Usa /browser <nombre>",
-        "lang_current": "Idioma actual: {lang}",
-        "lang_available": "Idiomas disponibles",
-        "lang_set": "Idioma cambiado a: {lang}",
-        "lang_invalid": "Idioma no valido: {code}. Usa /lang para ver opciones",
-        "lang_usage": "Usa /lang <codigo> para cambiar (ej. /lang en)",
-        # Settings panel
-        "settings_title": "Ajustes",
-        "available": "Disponibles",
-        "change_cmd": "Cambiar",
-        "save_cmd": "/save para guardar ajustes en disco",
-        # Apps panel
-        "cli_apps_title": "Aplicaciones CLI instaladas",
-        "apps_hint": "Tambien puedes pedir en el chat: 'abrir Safari', 'pon musica en Spotify', etc.",
-        # Tools panel
-        "tools_title": "Herramientas conectadas",
-        # Help panel
-        "term_subtitle": "TUI con IA",
-        "what_is": "Que es Term?",
-        "what_is_desc": "Una TUI que conecta con modelos de IA via OAuth CLI.\n  Chatea, controla tu Mac, abre apps, cambia musica,\n  y mas -- todo desde tu terminal.",
-        "commands_title": "Comandos",
-        "shortcuts_title": "Atajos de teclado",
-        "system_examples": "Ejemplos de control del sistema",
-        "config_path": "Config: {path}",
-        # Bindings
-        "quit": "Salir",
-        "clear": "Limpiar",
-        "new_tab": "Nueva tab",
-        "close_tab": "Cerrar tab",
-        "effort_binding": "Esfuerzo",
-        "cancel": "Cancelar",
-        # User/Assistant labels for export
-        "user_label": "Usuario",
-        "assistant_label": "Asistente",
-    },
-    "en": {
-        "effort_label": "Effort",
-        "context_label": "Context",
-        "model_label": "Model",
-        "dir_label": "Dir",
-        "processing": " Processing...",
-        "placeholder": "Message or /command...",
-        "write_or_help": "Type a message or /help for commands",
-        "commands_available": "Available commands",
-        "theme_set": "Theme",
-        "themes_list": "Themes",
-        "effort_set": "Effort",
-        "levels": "Levels",
-        "model_set": "Model",
-        "models_list": "Models",
-        "dir_set": "Dir",
-        "not_found": "Not found",
-        "save_done": "Configuration saved",
-        "about": "Term v{version}",
-        "models_available": "Available models",
-        "themes_available": "Available themes",
-        "active_marker": "<< active",
-        "connected": "connected",
-        "disconnected": "disconnected",
-        "context_reset": "Context reset to 0",
-        "open_usage": "Usage: /open <app name>",
-        "opening": "Opening {name}...",
-        "run_usage": "Usage: /run <command>",
-        "no_output": "(no output)",
-        "cmd_timeout": "Command timed out (10s)",
-        "volume_usage": "Usage: /volume <0-100>",
-        "volume_set": "Volume: {val}%",
-        "play_pause": "Play/Pause",
-        "next_track": "Next track",
-        "prev_track": "Previous track",
-        "copied": "Copied to clipboard",
-        "copy_error": "Copy error: {err}",
-        "no_response_copy": "No response to copy",
-        "messages_count": "Messages in this tab: {count}",
-        "exported": "Exported to {path}",
-        "export_error": "Export error: {err}",
-        "no_active_chat": "No active chat",
-        "compact_tip": "Tip: long conversations use more context. Use /clear to start fresh, or /reset to reset the counter.",
-        "cannot_close_last": "Cannot close the last tab",
-        "unknown_cmd": "Unknown command: {cmd}. Try /help",
-        "select_model": "Select model for new tab",
-        "type_number": "Type the number (1-{n}) or model name",
-        "invalid_model": "Invalid model: {text}",
-        "perms_title": "Term needs permissions to work correctly.",
-        "perms_accept": "By accepting, Term will be able to:",
-        "perms_apps": "Applications     Open and control apps (Safari, Spotify, etc.)",
-        "perms_files": "Files            Read and write files in your working directory",
-        "perms_system": "System           Adjust volume, run shell commands",
-        "perms_config": "Configuration    Save preferences in ~/.config/term/",
-        "perms_net": "Network          Connect to AI via OAuth",
-        "perms_local": "All commands run locally on your machine.",
-        "perms_oauth": "Term uses your existing OAuth authentication.",
-        "perms_question": "Accept permissions? (y/n)",
-        "perms_granted": "Permissions granted",
-        "perms_denied": "Permissions denied -- system functions disabled",
-        "select_browser": "Select browser",
-        "type_browser_number": "Type the number (1-{n}) or the name",
-        "set_default_browser": "Use /browser <name> to set a default",
-        "browser_not_found": "Browser not found: {text}",
-        "no_browsers": "No installed browsers found",
-        "default_browser_set": "Default browser: {name}",
-        "not_installed": "{name} is not installed",
-        "valid_names": "Valid names: {names}",
-        "current_browser": "Current browser: {name}",
-        "no_default_browser": "No default browser. Use /browser <name>",
-        "lang_current": "Current language: {lang}",
-        "lang_available": "Available languages",
-        "lang_set": "Language changed to: {lang}",
-        "lang_invalid": "Invalid language: {code}. Use /lang to see options",
-        "lang_usage": "Use /lang <code> to change (e.g. /lang es)",
-        "settings_title": "Settings",
-        "available": "Available",
-        "change_cmd": "Change",
-        "save_cmd": "/save to save settings to disk",
-        "cli_apps_title": "Installed CLI applications",
-        "apps_hint": "You can also ask in chat: 'open Safari', 'play music on Spotify', etc.",
-        "tools_title": "Connected tools",
-        "term_subtitle": "AI-powered TUI",
-        "what_is": "What is Term?",
-        "what_is_desc": "A TUI that connects to AI models via OAuth CLI.\n  Chat, control your Mac, open apps, change music,\n  and more -- all from your terminal.",
-        "commands_title": "Commands",
-        "shortcuts_title": "Keyboard shortcuts",
-        "system_examples": "System control examples",
-        "config_path": "Config: {path}",
-        "quit": "Quit",
-        "clear": "Clear",
-        "new_tab": "New tab",
-        "close_tab": "Close tab",
-        "effort_binding": "Effort",
-        "cancel": "Cancel",
-        "user_label": "User",
-        "assistant_label": "Assistant",
-    },
-    "pt": {
-        "effort_label": "Esforco",
-        "context_label": "Contexto",
-        "model_label": "Modelo",
-        "dir_label": "Dir",
-        "processing": " Processando...",
-        "placeholder": "Mensagem ou /comando...",
-        "write_or_help": "Digite uma mensagem ou /help para comandos",
-        "commands_available": "Comandos disponiveis",
-        "theme_set": "Tema",
-        "themes_list": "Temas",
-        "effort_set": "Esforco",
-        "levels": "Niveis",
-        "model_set": "Modelo",
-        "models_list": "Modelos",
-        "dir_set": "Dir",
-        "not_found": "Nao encontrado",
-        "save_done": "Configuracao salva",
-        "about": "Term v{version}",
-        "models_available": "Modelos disponiveis",
-        "themes_available": "Temas disponiveis",
-        "active_marker": "<< ativo",
-        "connected": "conectado",
-        "disconnected": "desconectado",
-        "context_reset": "Contexto reiniciado para 0",
-        "open_usage": "Uso: /open <nome do app>",
-        "opening": "Abrindo {name}...",
-        "run_usage": "Uso: /run <comando>",
-        "no_output": "(sem saida)",
-        "cmd_timeout": "Comando expirou (10s)",
-        "volume_usage": "Uso: /volume <0-100>",
-        "volume_set": "Volume: {val}%",
-        "play_pause": "Play/Pausa",
-        "next_track": "Proxima musica",
-        "prev_track": "Musica anterior",
-        "copied": "Copiado para a area de transferencia",
-        "copy_error": "Erro ao copiar: {err}",
-        "no_response_copy": "Sem resposta para copiar",
-        "messages_count": "Mensagens nesta aba: {count}",
-        "exported": "Exportado para {path}",
-        "export_error": "Erro ao exportar: {err}",
-        "no_active_chat": "Sem chat ativo",
-        "compact_tip": "Dica: conversas longas usam mais contexto. Use /clear para comecar de novo, ou /reset para reiniciar o contador.",
-        "cannot_close_last": "Nao e possivel fechar a ultima aba",
-        "unknown_cmd": "Comando desconhecido: {cmd}. Tente /help",
-        "select_model": "Selecione modelo para nova aba",
-        "type_number": "Digite o numero (1-{n}) ou nome do modelo",
-        "invalid_model": "Modelo invalido: {text}",
-        "perms_title": "Term precisa de permissoes para funcionar corretamente.",
-        "perms_accept": "Ao aceitar, Term podera:",
-        "perms_apps": "Aplicativos      Abrir e controlar apps (Safari, Spotify, etc.)",
-        "perms_files": "Arquivos         Ler e escrever arquivos no seu diretorio de trabalho",
-        "perms_system": "Sistema          Ajustar volume, executar comandos shell",
-        "perms_config": "Configuracao     Salvar preferencias em ~/.config/term/",
-        "perms_net": "Rede             Conectar com a IA via OAuth",
-        "perms_local": "Todos os comandos sao executados localmente na sua maquina.",
-        "perms_oauth": "Term usa sua autenticacao OAuth existente.",
-        "perms_question": "Aceitar permissoes? (s/n)",
-        "perms_granted": "Permissoes concedidas",
-        "perms_denied": "Permissoes negadas -- funcoes de sistema desativadas",
-        "select_browser": "Selecione navegador",
-        "type_browser_number": "Digite o numero (1-{n}) ou o nome",
-        "set_default_browser": "Use /browser <nome> para definir um padrao",
-        "browser_not_found": "Navegador nao encontrado: {text}",
-        "no_browsers": "Nenhum navegador instalado encontrado",
-        "default_browser_set": "Navegador padrao: {name}",
-        "not_installed": "{name} nao esta instalado",
-        "valid_names": "Nomes validos: {names}",
-        "current_browser": "Navegador atual: {name}",
-        "no_default_browser": "Sem navegador padrao. Use /browser <nome>",
-        "lang_current": "Idioma atual: {lang}",
-        "lang_available": "Idiomas disponiveis",
-        "lang_set": "Idioma alterado para: {lang}",
-        "lang_invalid": "Idioma invalido: {code}. Use /lang para ver opcoes",
-        "lang_usage": "Use /lang <codigo> para mudar (ex. /lang en)",
-        "settings_title": "Configuracoes",
-        "available": "Disponiveis",
-        "change_cmd": "Alterar",
-        "save_cmd": "/save para salvar configuracoes no disco",
-        "cli_apps_title": "Aplicativos CLI instalados",
-        "apps_hint": "Voce tambem pode pedir no chat: 'abrir Safari', 'tocar musica no Spotify', etc.",
-        "tools_title": "Ferramentas conectadas",
-        "term_subtitle": "TUI com IA",
-        "what_is": "O que e Term?",
-        "what_is_desc": "Uma TUI que conecta com modelos de IA via OAuth CLI.\n  Converse, controle seu Mac, abra apps, mude musica,\n  e mais -- tudo do seu terminal.",
-        "commands_title": "Comandos",
-        "shortcuts_title": "Atalhos de teclado",
-        "system_examples": "Exemplos de controle do sistema",
-        "config_path": "Config: {path}",
-        "quit": "Sair",
-        "clear": "Limpar",
-        "new_tab": "Nova aba",
-        "close_tab": "Fechar aba",
-        "effort_binding": "Esforco",
-        "cancel": "Cancelar",
-        "user_label": "Usuario",
-        "assistant_label": "Assistente",
-    },
-    "fr": {
-        "effort_label": "Effort",
-        "context_label": "Contexte",
-        "model_label": "Modele",
-        "dir_label": "Rep",
-        "processing": " Traitement...",
-        "placeholder": "Message ou /commande...",
-        "write_or_help": "Tapez un message ou /help pour les commandes",
-        "commands_available": "Commandes disponibles",
-        "theme_set": "Theme",
-        "themes_list": "Themes",
-        "effort_set": "Effort",
-        "levels": "Niveaux",
-        "model_set": "Modele",
-        "models_list": "Modeles",
-        "dir_set": "Rep",
-        "not_found": "Non trouve",
-        "save_done": "Configuration sauvegardee",
-        "about": "Term v{version}",
-        "models_available": "Modeles disponibles",
-        "themes_available": "Themes disponibles",
-        "active_marker": "<< actif",
-        "connected": "connecte",
-        "disconnected": "deconnecte",
-        "context_reset": "Contexte reinitialise a 0",
-        "open_usage": "Utilisation: /open <nom app>",
-        "opening": "Ouverture de {name}...",
-        "run_usage": "Utilisation: /run <commande>",
-        "no_output": "(pas de sortie)",
-        "cmd_timeout": "Commande expiree (10s)",
-        "volume_usage": "Utilisation: /volume <0-100>",
-        "volume_set": "Volume: {val}%",
-        "play_pause": "Play/Pause",
-        "next_track": "Piste suivante",
-        "prev_track": "Piste precedente",
-        "copied": "Copie dans le presse-papiers",
-        "copy_error": "Erreur de copie: {err}",
-        "no_response_copy": "Pas de reponse a copier",
-        "messages_count": "Messages dans cet onglet: {count}",
-        "exported": "Exporte vers {path}",
-        "export_error": "Erreur d'export: {err}",
-        "no_active_chat": "Pas de chat actif",
-        "compact_tip": "Conseil: les longues conversations utilisent plus de contexte. Utilisez /clear pour recommencer, ou /reset pour reinitialiser le compteur.",
-        "cannot_close_last": "Impossible de fermer le dernier onglet",
-        "unknown_cmd": "Commande inconnue: {cmd}. Essayez /help",
-        "select_model": "Selectionnez le modele pour le nouvel onglet",
-        "type_number": "Tapez le numero (1-{n}) ou le nom du modele",
-        "invalid_model": "Modele invalide: {text}",
-        "perms_title": "Term a besoin de permissions pour fonctionner correctement.",
-        "perms_accept": "En acceptant, Term pourra:",
-        "perms_apps": "Applications     Ouvrir et controler des apps (Safari, Spotify, etc.)",
-        "perms_files": "Fichiers         Lire et ecrire des fichiers dans votre repertoire de travail",
-        "perms_system": "Systeme          Ajuster le volume, executer des commandes shell",
-        "perms_config": "Configuration    Sauvegarder les preferences dans ~/.config/term/",
-        "perms_net": "Reseau           Se connecter a l'IA via OAuth",
-        "perms_local": "Toutes les commandes s'executent localement sur votre machine.",
-        "perms_oauth": "Term utilise votre authentification OAuth existante.",
-        "perms_question": "Accepter les permissions? (o/n)",
-        "perms_granted": "Permissions accordees",
-        "perms_denied": "Permissions refusees -- fonctions systeme desactivees",
-        "select_browser": "Selectionnez le navigateur",
-        "type_browser_number": "Tapez le numero (1-{n}) ou le nom",
-        "set_default_browser": "Utilisez /browser <nom> pour definir un defaut",
-        "browser_not_found": "Navigateur non trouve: {text}",
-        "no_browsers": "Aucun navigateur installe trouve",
-        "default_browser_set": "Navigateur par defaut: {name}",
-        "not_installed": "{name} n'est pas installe",
-        "valid_names": "Noms valides: {names}",
-        "current_browser": "Navigateur actuel: {name}",
-        "no_default_browser": "Pas de navigateur par defaut. Utilisez /browser <nom>",
-        "lang_current": "Langue actuelle: {lang}",
-        "lang_available": "Langues disponibles",
-        "lang_set": "Langue changee en: {lang}",
-        "lang_invalid": "Langue invalide: {code}. Utilisez /lang pour voir les options",
-        "lang_usage": "Utilisez /lang <code> pour changer (ex. /lang en)",
-        "settings_title": "Parametres",
-        "available": "Disponibles",
-        "change_cmd": "Changer",
-        "save_cmd": "/save pour sauvegarder les parametres sur le disque",
-        "cli_apps_title": "Applications CLI installees",
-        "apps_hint": "Vous pouvez aussi demander dans le chat: 'ouvrir Safari', 'mettre de la musique sur Spotify', etc.",
-        "tools_title": "Outils connectes",
-        "term_subtitle": "TUI avec IA",
-        "what_is": "Qu'est-ce que Term?",
-        "what_is_desc": "Un TUI qui se connecte aux modeles d'IA via OAuth CLI.\n  Discutez, controlez votre Mac, ouvrez des apps, changez la musique,\n  et plus -- tout depuis votre terminal.",
-        "commands_title": "Commandes",
-        "shortcuts_title": "Raccourcis clavier",
-        "system_examples": "Exemples de controle du systeme",
-        "config_path": "Config: {path}",
-        "quit": "Quitter",
-        "clear": "Effacer",
-        "new_tab": "Nouvel onglet",
-        "close_tab": "Fermer l'onglet",
-        "effort_binding": "Effort",
-        "cancel": "Annuler",
-        "user_label": "Utilisateur",
-        "assistant_label": "Assistant",
-    },
-}
-
-# Fallback: for languages without full translation, use Spanish
-for _code in LANGUAGES:
-    if _code not in TRANSLATIONS:
-        TRANSLATIONS[_code] = TRANSLATIONS["es"]
-
-# ---------------------------------------------------------------------------
-# System prompt for macOS control
-# ---------------------------------------------------------------------------
-
-SYSTEM_CONTEXT_BASE = (
-    "Eres Term, un asistente de terminal con IA. Puedes controlar esta Mac.\n"
-    "Cuando el usuario pida abrir apps, cambiar canciones, ajustar volumen, etc., usa osascript/AppleScript.\n\n"
-    "Ejemplos:\n"
-    "- Abrir Safari: osascript -e 'tell application \"Safari\" to activate'\n"
-    "- Play/pausa Spotify: osascript -e 'tell application \"Spotify\" to playpause'\n"
-    "- Siguiente cancion: osascript -e 'tell application \"Spotify\" to next track'\n"
-    "- Cancion anterior: osascript -e 'tell application \"Spotify\" to previous track'\n"
-    "- Ajustar volumen: osascript -e 'set volume output volume 50'\n"
-    "- Abrir Finder: open ~/Desktop\n"
-    "- Abrir app: open -a \"App Name\"\n"
-    "- Cancion actual: osascript -e 'tell application \"Spotify\" to name of current track'\n\n"
-    "Tienes acceso completo al shell. Ejecuta comandos directamente. Se conciso."
+from . import config as cfg_mod
+from . import syscontrol as sysctl
+from .commands import (
+    COMMANDS_HELP,
+    SHORTCUTS_HELP,
+    build_system_context,
+    complete_command,
 )
+from .i18n import LANGUAGES, translate
+from .models import (
+    AI_MODELS,
+    EFFORT_LEVELS,
+    PERMISSION_MODES,
+    model_label,
+    resolve_model,
+)
+from .session import ClaudeSession, claude_available
+from .store import SessionStore
+from .styles import APP_CSS
+from .themes import DEFAULT_THEME, THEMES, build_logo, theme_names
+from .version import VERSION
+
+# Cada cuanto se repinta el Markdown mientras llega la respuesta. Repintar en
+# cada delta obliga a reparsear el texto entero una y otra vez, que es lo que
+# hacia que las respuestas largas se arrastrasen.
+_RENDER_INTERVAL = 0.12
+
+# Tope de lo que se adjunta de un archivo, para no vaciar un fichero enorme
+# dentro del prompt.
+_ATTACH_LIMIT = 40_000
+
+_PANELS = ("help", "apps", "tools", "settings")
 
 
-def _build_system_context(lang: str) -> str:
-    lang_name = LANGUAGES.get(lang, "Espanol")
-    lang_instruction = f"\n\nIMPORTANT: Always respond in {lang_name} ({lang})."
-    return SYSTEM_CONTEXT_BASE + lang_instruction
-
-# ---------------------------------------------------------------------------
-# Command reference
-# ---------------------------------------------------------------------------
-
-COMMANDS_HELP: dict[str, str] = {
-    "/theme <nombre>":        "Cambiar tema (neon, dracula, monokai, catppuccin, gruvbox, tokyo)",
-    "/effort <nivel>":        "Nivel de esfuerzo (low, medium, high, max)",
-    "/model <nombre>":        "Cambiar modelo (claude, claude-opus, claude-haiku)",
-    "/name <texto>":          "Renombrar la tab activa",
-    "/workdir <ruta>":        "Cambiar directorio de trabajo",
-    "/new [nombre] [modelo]": "Nueva tab (ej. /new MiChat claude-opus)",
-    "/close":                 "Cerrar tab activa",
-    "/clear":                 "Limpiar chat",
-    "/save":                  "Guardar configuracion",
-    "/help":                  "Panel de ayuda",
-    "/apps":                  "Panel de aplicaciones",
-    "/tools":                 "Panel de herramientas",
-    "/settings":              "Panel de ajustes",
-    "/about":                 "Acerca de Term",
-    "/models":                "Listar modelos con estado de conexion",
-    "/themes":                "Listar temas con el activo marcado",
-    "/status":                "Estado actual (tema, modelo, esfuerzo, directorio)",
-    "/reset":                 "Reiniciar contexto estimado a 0",
-    "/version":               "Mostrar version de Term",
-    "/open <app>":            "Abrir una aplicacion (ej. /open Safari)",
-    "/run <cmd>":             "Ejecutar comando shell y mostrar salida",
-    "/volume <0-100>":        "Ajustar volumen del sistema",
-    "/play":                  "Play/Pausa en Spotify",
-    "/next":                  "Siguiente cancion en Spotify",
-    "/prev":                  "Cancion anterior en Spotify",
-    "/copy":                  "Copiar ultima respuesta al portapapeles",
-    "/history":               "Cantidad de mensajes en esta tab",
-    "/export":                "Guardar chat en archivo de texto",
-    "/compact":               "Consejo: resumir chats largos para ahorrar contexto",
-    "/restart":               "Cerrar y reiniciar Term",
-    "/browse [url]":          "Abrir URL en navegador (selector de navegadores)",
-    "/browser <nombre>":      "Establecer navegador por defecto (brave, chrome, safari)",
-    "/lang [codigo]":         "Cambiar idioma (es, en, pt, fr, de, it, zh, ja, ko, ar)",
-    "/files":                 "Refrescar panel de archivos",
-    "/attach <ruta>":         "Adjuntar archivo al siguiente mensaje",
-}
-
-SHORTCUTS_HELP: dict[str, str] = {
-    "ctrl+t": "Nueva tab",
-    "ctrl+w": "Cerrar tab",
-    "ctrl+l": "Limpiar chat",
-    "ctrl+e": "Cambiar esfuerzo",
-    "escape":  "Cancelar generacion",
-}
-
-# ---------------------------------------------------------------------------
-# Config persistence
-# ---------------------------------------------------------------------------
-
-CONFIG_PATH = Path.home() / ".config" / "term" / "config.json"
+def _human_size(num: int) -> str:
+    for unit in ("B", "KB", "MB"):
+        if num < 1024 or unit == "MB":
+            return f"{num:.0f} {unit}" if unit == "B" else f"{num / 1:.1f} {unit}"
+        num //= 1024
+    return f"{num} B"
 
 
-def _load_config() -> dict:
-    if CONFIG_PATH.exists():
-        try:
-            return json.loads(CONFIG_PATH.read_text())
-        except Exception:
-            pass
-    return {
-        "theme": "neon",
-        "workdir": str(Path.home()),
-        "effort": "high",
-        "model": "claude",
-        "permissions_granted": False,
-        "lang": "es",
-    }
-
-
-def _save_config(cfg: dict) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
-
-# ---------------------------------------------------------------------------
-# Detect installed CLI apps
-# ---------------------------------------------------------------------------
+def _fmt_size(path: Path) -> str:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "?"
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
 
 
 # ---------------------------------------------------------------------------
-# Detect installed browsers
-# ---------------------------------------------------------------------------
-
-BROWSER_MAP = {
-    "Safari": "Safari",
-    "Google Chrome": "Google Chrome",
-    "Brave Browser": "Brave Browser",
-    "Firefox": "Firefox",
-    "Microsoft Edge": "Microsoft Edge",
-    "Opera": "Opera",
-    "Arc": "Arc",
-    "Vivaldi": "Vivaldi",
-    "Zen Browser": "Zen Browser",
-}
-
-BROWSER_ALIASES = {
-    "safari": "Safari",
-    "chrome": "Google Chrome",
-    "brave": "Brave Browser",
-    "firefox": "Firefox",
-    "edge": "Microsoft Edge",
-    "opera": "Opera",
-    "arc": "Arc",
-    "vivaldi": "Vivaldi",
-    "zen": "Zen Browser",
-}
-
-
-def _detect_browsers() -> list[dict]:
-    found = []
-    apps_dir = Path("/Applications")
-    for name, app_name in BROWSER_MAP.items():
-        if (apps_dir / f"{app_name}.app").exists():
-            found.append({"name": name, "app": app_name})
-    return found
-
-# ---------------------------------------------------------------------------
-# Detect installed CLI apps
-# ---------------------------------------------------------------------------
-
-
-def _detect_apps() -> list[dict]:
-    candidates = [
-        ("vim", "Vim", "Editor"),
-        ("nvim", "Neovim", "Editor"),
-        ("nano", "Nano", "Editor"),
-        ("htop", "htop", "Monitor"),
-        ("btop", "btop", "Monitor"),
-        ("top", "top", "Monitor"),
-        ("python3", "Python REPL", "Dev"),
-        ("node", "Node.js REPL", "Dev"),
-        ("git", "Git", "Dev"),
-        ("docker", "Docker", "Dev"),
-        ("lazygit", "LazyGit", "Dev"),
-        ("tmux", "tmux", "Terminal"),
-        ("mc", "Midnight Commander", "Archivos"),
-    ]
-    return [
-        {"cmd": cmd, "name": name, "category": cat}
-        for cmd, name, cat in candidates
-        if shutil.which(cmd)
-    ]
-
-# ---------------------------------------------------------------------------
-# Logo builder with gradient colouring
-# ---------------------------------------------------------------------------
-
-
-def _build_logo(theme_key: str = "neon") -> str:
-    grad = THEMES.get(theme_key, THEMES["neon"])["grad"]
-    mx = max(len(ln) for ln in _LOGO)
-    lines: list[str] = []
-    for ln in _LOGO:
-        buf = ""
-        for i, ch in enumerate(ln):
-            if ch == " ":
-                buf += " "
-            else:
-                idx = int(i / max(mx, 1) * (len(grad) - 1))
-                buf += f"[bold {grad[idx]}]{ch}[/]"
-        lines.append(buf)
-    return "\n".join(lines)
-
-# ---------------------------------------------------------------------------
-# CSS -- uses $variables resolved by get_css_variables()
-# ---------------------------------------------------------------------------
-
-APP_CSS = """
-Screen {
-    background: $bg1;
-}
-
-/* -- Top bar -- */
-#top-bar {
-    dock: top;
-    height: 2;
-    background: $bg2;
-    border-bottom: solid $border;
-    padding: 0 2;
-}
-#top-bar-title {
-    color: $accent1;
-    text-style: bold;
-    width: 1fr;
-    padding: 0 1;
-}
-#theme-cycle-btn {
-    background: $bg3;
-    color: $accent1;
-    border: none;
-    dock: right;
-    padding: 0 2;
-    min-width: 16;
-}
-#theme-cycle-btn:hover {
-    background: $accent1;
-    color: $bg1;
-}
-
-/* -- Main area -- */
-#main {
-    background: $bg1;
-}
-TabbedContent {
-    background: $bg1;
-}
-ContentSwitcher {
-    background: $bg1;
-}
-TabPane {
-    background: $bg1;
-    padding: 0;
-}
-Tabs {
-    background: $bg2;
-    border-bottom: solid $border;
-}
-Tab {
-    background: $bg2;
-    color: $muted;
-    padding: 0 3;
-    min-width: 12;
-    text-style: bold;
-}
-Tab:hover {
-    color: $accent1;
-}
-Tab.-active {
-    background: $bg1;
-    color: $accent1;
-    text-style: bold;
-}
-Underline {
-    color: $accent1;
-}
-
-/* -- Chat area -- */
-.chat-wrap {
-    background: $bg1;
-}
-.messages {
-    background: $bg1;
-    padding: 1 2;
-    scrollbar-color: $border;
-    scrollbar-color-hover: $accent1;
-}
-.user-msg {
-    color: $text;
-    margin: 1 2 0 16;
-    padding: 1 2;
-    border: none;
-    background: transparent;
-    text-align: right;
-}
-.user-msg-inner {
-    background: $bg3;
-    color: $text;
-    padding: 1 2;
-    border: solid $accent2;
-    text-align: left;
-}
-.assistant-msg {
-    background: transparent;
-    color: $text;
-    margin: 0 8 1 2;
-    padding: 0 2 1 2;
-    border: none;
-}
-.assistant-msg Markdown {
-    margin: 0;
-    padding: 0;
-}
-.assistant-msg MarkdownFence {
-    background: #0d1117;
-    border: solid $border;
-    margin: 1 0;
-}
-.assistant-msg MarkdownH1,
-.assistant-msg MarkdownH2,
-.assistant-msg MarkdownH3 {
-    color: $accent2;
-    text-style: bold;
-}
-.assistant-msg MarkdownBlockQuote {
-    border-left: outer $accent1;
-    padding: 0 0 0 2;
-    color: $muted;
-}
-
-/* -- Input bar -- */
-.input-bar {
-    dock: bottom;
-    height: 3;
-    background: $bg1;
-    padding: 0 20 0 20;
-}
-.input-bar Input {
-    background: $bg1;
-    color: $text;
-    border: none;
-}
-.input-bar Input:focus {
-    border: none;
-}
-
-/* -- Command suggestions -- */
-.cmd-suggestions {
-    dock: bottom;
-    height: auto;
-    max-height: 12;
-    background: $bg2;
-    color: $text;
-    padding: 0 12;
-    display: none;
-    border-top: solid $border;
-}
-.cmd-suggestions.visible {
-    display: block;
-}
-
-/* -- Status bar -- */
-#status-bar {
-    dock: bottom;
-    height: 2;
-    background: $bg2;
-    color: $muted;
-    padding: 0 2;
-    text-style: bold;
-}
-#status-effort {
-    color: $accent4;
-    text-style: bold;
-}
-#status-context {
-    color: $accent1;
-}
-#status-model {
-    color: $accent2;
-}
-#status-workdir {
-    color: $muted;
-}
-
-/* -- Loading indicator -- */
-.loading {
-    color: $accent1;
-    text-style: bold italic;
-    margin: 0 2;
-    display: none;
-}
-.loading.visible {
-    display: block;
-}
-
-/* -- Empty state / info blocks -- */
-.info-block {
-    color: $muted;
-    text-align: center;
-    margin: 2 0;
-    padding: 2;
-}
-
-/* -- Panels -- */
-.panel {
-    padding: 2 4;
-    background: $bg1;
-}
-.panel Label {
-    color: $text;
-}
-
-/* -- Footer -- */
-Footer {
-    background: $bg2;
-    color: $muted;
-    height: 2;
-    text-style: bold;
-}
-
-/* -- File panel -- */
-#file-panel {
-    width: 28;
-    background: $bg2;
-    border-left: solid $border;
-    padding: 1;
-    display: none;
-}
-#file-panel.visible {
-    display: block;
-}
-#file-panel-title {
-    color: $accent1;
-    text-style: bold;
-    padding: 0 0 1 0;
-}
-#file-panel ListView {
-    background: $bg2;
-    scrollbar-color: $border;
-    scrollbar-color-hover: $accent1;
-}
-#file-panel ListItem {
-    background: $bg2;
-    color: $text;
-    padding: 0 1;
-}
-#file-panel ListItem:hover {
-    background: $bg3;
-}
-#chat-col {
-    width: 1fr;
-}
-"""
-
-# ---------------------------------------------------------------------------
-# Widgets
+# Widgets de mensaje
 # ---------------------------------------------------------------------------
 
 
 class UserMessage(Static):
-    """Un mensaje del usuario."""
+    """Un mensaje escrito por el usuario."""
 
     def __init__(self, text: str) -> None:
         super().__init__(text)
+        self.raw_text = text
         self.add_class("user-msg")
 
 
+class ToolEvent(Static):
+    """Aviso de que Claude ha usado una herramienta."""
+
+    def __init__(self, tool: str, detail: str) -> None:
+        label = f"  {tool}"
+        if detail:
+            label += f"  [dim]{detail}[/]"
+        super().__init__(label)
+        self.add_class("tool-event")
+
+
 class AssistantMessage(Vertical):
-    """Respuesta del asistente con streaming -- envuelve un Markdown."""
+    """Respuesta de Claude. Acumula texto y repinta a intervalos."""
 
     def __init__(self) -> None:
         super().__init__()
         self.add_class("assistant-msg")
-        self._text = ""
+        self.text = ""
         self._md: Markdown | None = None
+        self._last_render = 0.0
+        self._dirty = False
 
     def compose(self) -> ComposeResult:
         self._md = Markdown("")
         yield self._md
 
-    async def stream(self, text: str) -> None:
-        self._text = text
-        if self._md is not None:
-            await self._md.update(text)
+    async def append(self, chunk: str) -> None:
+        """Anadir texto y repintar solo si toca."""
+        self.text += chunk
+        self._dirty = True
+        now = time.monotonic()
+        if now - self._last_render >= _RENDER_INTERVAL:
+            await self.flush()
+
+    async def flush(self) -> None:
+        """Forzar el repintado del texto acumulado."""
+        if self._md is None or not self._dirty:
+            return
+        self._dirty = False
+        self._last_render = time.monotonic()
+        with contextlib.suppress(Exception):
+            await self._md.update(self.text)
+
+    def code_blocks(self) -> list[str]:
+        """Bloques ``` de la respuesta, para poder copiarlos sueltos."""
+        return [
+            block.strip()
+            for block in re.findall(r"```[^\n]*\n(.*?)```", self.text, re.DOTALL)
+        ]
+
+
+class ChatInput(TextArea):
+    """Entrada de varias lineas.
+
+    Enter envia el mensaje y alt+enter (o shift+enter, segun lo que el terminal
+    sepa mandar) inserta un salto de linea. Las flechas recorren el historial
+    solo cuando el cursor esta en el borde del texto, para no estorbar al
+    moverse por un mensaje de varias lineas.
+    """
+
+    class Submitted(events.Message):
+        def __init__(self, text: str, tab_id: str) -> None:
+            super().__init__()
+            self.text = text
+            self.tab_id = tab_id
+
+    class HistoryMove(events.Message):
+        def __init__(self, delta: int, tab_id: str) -> None:
+            super().__init__()
+            self.delta = delta
+            self.tab_id = tab_id
+
+    class CompleteRequested(events.Message):
+        def __init__(self, tab_id: str) -> None:
+            super().__init__()
+            self.tab_id = tab_id
+
+    def __init__(self, tab_id: str, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.tab_id = tab_id
+        self.show_line_numbers = False
+        self.add_class("chat-input")
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.prevent_default()
+            event.stop()
+            self.post_message(self.Submitted(self.text, self.tab_id))
+            return
+        if event.key in ("alt+enter", "shift+enter", "ctrl+j"):
+            event.prevent_default()
+            event.stop()
+            self.insert("\n")
+            return
+        if event.key == "tab" and self.text.lstrip().startswith("/"):
+            event.prevent_default()
+            event.stop()
+            self.post_message(self.CompleteRequested(self.tab_id))
+            return
+        if event.key in ("up", "down"):
+            row, _ = self.cursor_location
+            last_row = self.document.line_count - 1
+            at_edge = (event.key == "up" and row == 0) or (
+                event.key == "down" and row == last_row
+            )
+            if at_edge:
+                event.prevent_default()
+                event.stop()
+                self.post_message(
+                    self.HistoryMove(-1 if event.key == "up" else 1, self.tab_id)
+                )
+                return
+        await super()._on_key(event)
+
 
 # ---------------------------------------------------------------------------
-# ChatTab -- one per conversation
+# Pestana de chat
 # ---------------------------------------------------------------------------
 
 
 class ChatTab(Vertical):
-    """Interfaz de chat completa: mensajes scrolleables + barra de entrada."""
+    """Una conversacion: mensajes, entrada y su sesion de Claude."""
 
-    def __init__(
-        self,
-        model_key: str,
-        tab_id: str,
-        theme_key: str,
-        workdir: str,
-    ) -> None:
+    def __init__(self, model_key: str, tab_id: str, theme_key: str, workdir: str) -> None:
         super().__init__()
         self.model_key = model_key
         self.tab_id = tab_id
         self.theme_key = theme_key
         self.workdir = workdir
-        self.proc: asyncio.subprocess.Process | None = None
+        self.session = ClaudeSession()
         self.assistant_widget: AssistantMessage | None = None
         self.is_loading = False
         self.message_count = 0
         self.last_response = ""
+        self.history: list[str] = []
+        self.history_pos = 0
+        self.attachments: list[tuple[str, str]] = []
+        self.title = ""
 
     def compose(self) -> ComposeResult:
-        model = AI_MODELS.get(self.model_key, AI_MODELS["claude"])
-        logo = _build_logo(self.theme_key)
         with Vertical(classes="chat-wrap"):
             with VerticalScroll(classes="messages", id=f"msgs-{self.tab_id}"):
                 yield Static(
-                    logo + "\n\n"
-                    f"[dim]{model['name']} | Escribe un mensaje o /help para comandos[/]",
+                    build_logo(self.theme_key),
                     classes="info-block",
                     id=f"empty-{self.tab_id}",
                 )
-            yield Label(" Procesando...", classes="loading", id=f"load-{self.tab_id}")
+            yield Label("", classes="loading", id=f"load-{self.tab_id}")
             yield Static("", classes="cmd-suggestions", id=f"cmdsug-{self.tab_id}")
+            yield Label("", classes="input-hint", id=f"hint-{self.tab_id}")
             with Horizontal(classes="input-bar"):
-                yield Input(
-                    placeholder="Mensaje o /comando...",
-                    id=f"input-{self.tab_id}",
-                )
+                yield ChatInput(self.tab_id, id=f"input-{self.tab_id}")
+
 
 # ---------------------------------------------------------------------------
-# TermApp -- the main application
+# Aplicacion
 # ---------------------------------------------------------------------------
 
 
 class TermApp(App):
     TITLE = "Term"
     CSS = APP_CSS
-    COMMANDS = set()  # Disable built-in command palette (has theme selector)
+    COMMANDS = set()  # Term trae su propia lista de comandos con "/".
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Salir"),
-        Binding("ctrl+l", "clear_tab", "Limpiar"),
         Binding("ctrl+t", "new_tab", "Nueva tab"),
-        Binding("ctrl+w", "close_tab", "Cerrar tab"),
+        Binding("ctrl+w", "close_active", "Cerrar"),
+        Binding("ctrl+l", "clear_tab", "Limpiar"),
         Binding("ctrl+e", "cycle_effort", "Esfuerzo"),
+        Binding("ctrl+b", "toggle_files", "Archivos"),
+        Binding("ctrl+y", "copy_last", "Copiar", show=False),
         Binding("escape", "cancel", "Cancelar"),
+        *[
+            Binding(f"ctrl+{n}", f"goto_tab({n})", f"Tab {n}", show=False)
+            for n in range(1, 10)
+        ],
     ]
 
-    theme_key: reactive[str] = reactive("neon")
+    theme_key: reactive[str] = reactive(DEFAULT_THEME)
     effort: reactive[str] = reactive("high")
-    current_model: reactive[str] = reactive("claude")
+    current_model: reactive[str] = reactive("default")
     tab_counter: var[int] = var(0)
 
-    # ------------------------------------------------------------------ init
-
-    def __init__(self, workdir: str = "", theme: str = "") -> None:
-        cfg = _load_config()
-        self._context_tokens = 0
-        self._max_context = 200_000
+    def __init__(self, workdir: str = "", theme: str = "", lang: str = "") -> None:
+        cfg = cfg_mod.load_config()
+        self._cfg = cfg
         self._tabs: dict[str, ChatTab] = {}
-        self._apps = _detect_apps()
-        self._browsers = _detect_browsers()
-        self._default_browser: str = cfg.get("default_browser", "")
-        self._active_panel = "chat"
-        self._awaiting_model_selection: str | None = None
-        self._pending_new_tab_name: str | None = None
-        self._awaiting_browser_selection: str | None = None
-        self._pending_browse_url: str = ""
-        self._awaiting_permissions = False
-        self._permissions_granted: bool = cfg.get("permissions_granted", False)
-        self._lang: str = cfg.get("lang", "es")
-        self._attached_content: str = ""
+        self._apps = sysctl.detect_cli_apps()
+        self._browsers = sysctl.detect_browsers()
+        self._default_browser: str = cfg["default_browser"]
+        self._permissions_granted: bool = cfg["permissions_granted"]
+        self._permission_mode: str = cfg["permission_mode"]
+        self._lang: str = lang or cfg["lang"]
+        self._show_files: bool = cfg["show_file_panel"]
+        self._store = SessionStore()
+        self._awaiting: str | None = None      # dialogo modal en curso
+        self._awaiting_tab: str = ""
+        self._pending_tab_name: str | None = None
+        self._pending_url: str = ""
+        self._git_branch = ""
         super().__init__()
-        self.workdir: str = workdir or cfg.get("workdir", str(Path.home()))
-        self.theme_key = theme or cfg.get("theme", "neon")
-        self.effort = cfg.get("effort", "high")
-        self.current_model = cfg.get("model", "claude")
+        self.workdir = workdir or cfg["workdir"]
+        self.theme_key = theme or cfg["theme"]
+        self.effort = cfg["effort"]
+        self.current_model = cfg["model"]
 
-    # ------------------------------------------------------------------ i18n helper
+    # ------------------------------------------------------------------ i18n
 
     def _t(self, key: str, **kwargs: object) -> str:
-        """Get translated string for current language."""
-        strings = TRANSLATIONS.get(self._lang, TRANSLATIONS["es"])
-        text = strings.get(key, TRANSLATIONS["es"].get(key, key))
-        if kwargs:
-            text = text.format(**kwargs)
-        return text
+        return translate(self._lang, key, **kwargs)
 
-    # ----------------------------------------------------- CSS variables (COMPLETE)
+    # ------------------------------------------------------- variables de CSS
 
     def get_css_variables(self) -> dict[str, str]:
-        t = THEMES.get(self.theme_key, THEMES["neon"])
+        t = THEMES.get(self.theme_key, THEMES[DEFAULT_THEME])
         bg1, bg2, bg3 = t["bg1"], t["bg2"], t["bg3"]
         brd = t["border"]
         a1, a2, a3, a4 = t["accent1"], t["accent2"], t["accent3"], t["accent4"]
         txt, mut = t["text"], t["muted"]
 
         return {
-            # Core
             "background": bg1, "foreground": txt,
             "panel": bg2, "surface": bg2,
             "primary": a1, "secondary": a2, "accent": a3,
             "warning": a4, "error": a2, "success": a3,
             "boost": bg3,
             "border": brd, "border-blurred": brd,
-            # Foreground variants
             "foreground-darken-1": mut, "foreground-muted": mut,
-            # Panel variants
             "panel-darken-1": bg1, "panel-darken-2": bg1, "panel-lighten-1": bg3,
-            # Surface variants
             "surface-darken-1": bg1,
-            "surface-lighten-1": bg3, "surface-lighten-2": bg3, "surface-lighten-3": bg3,
-            # Primary variants
+            "surface-lighten-1": bg3, "surface-lighten-2": bg3,
+            "surface-lighten-3": bg3,
             "primary-darken-2": a1, "primary-darken-3": a1,
             "primary-lighten-3": a1, "primary-muted": mut,
-            # Accent variants
             "accent-darken-1": a3, "accent-muted": mut,
-            # Error variants
             "error-darken-1": a2, "error-darken-2": a2,
             "error-darken-3": a2, "error-lighten-2": a2, "error-muted": mut,
-            # Success variants
             "success-darken-2": a3, "success-darken-3": a3,
             "success-lighten-1": a3, "success-lighten-2": a3, "success-muted": mut,
-            # Warning variants
             "warning-darken-1": a4, "warning-darken-2": a4,
             "warning-darken-3": a4, "warning-lighten-2": a4,
             "warning-muted": mut, "warning-text": bg1,
-            # Secondary
             "secondary-muted": mut,
-            # Screen selection
             "screen-selection-background": a1, "screen-selection-foreground": bg1,
-            # Input cursor
             "input-cursor-background": a1, "input-cursor-foreground": bg1,
             "input-cursor-text-style": "bold",
             "input-selection-background": a1, "input-selection-foreground": bg1,
-            # Block cursor
             "block-cursor-background": a1, "block-cursor-foreground": bg1,
             "block-cursor-text-style": "bold",
             "block-cursor-blurred-background": mut,
             "block-cursor-blurred-foreground": txt,
             "block-cursor-blurred-text-style": "none",
             "block-hover-background": bg3,
-            # Scrollbar
             "scrollbar": brd, "scrollbar-hover": a1, "scrollbar-active": a1,
             "scrollbar-background": bg1,
             "scrollbar-background-hover": bg1,
             "scrollbar-background-active": bg1,
             "scrollbar-corner-color": bg1,
-            # Footer
             "footer-background": bg2, "footer-foreground": mut,
             "footer-key-background": bg3, "footer-key-foreground": a1,
             "footer-description-background": bg2,
             "footer-description-foreground": mut,
             "footer-item-background": bg2,
-            # Button
             "button-foreground": txt, "button-color-foreground": txt,
             "button-focus-text-style": "bold",
-            # Link
             "link-background": "transparent", "link-background-hover": bg3,
             "link-color": a1, "link-color-hover": a1,
             "link-style": "underline", "link-style-hover": "bold underline",
-            # Text semantic colours
             "text": txt, "text-muted": mut, "text-disabled": mut,
             "text-accent": a1, "text-primary": a1, "text-secondary": a2,
             "text-success": a3, "text-warning": a4, "text-error": a2,
-            # ANSI
             "ansi-background": bg1, "ansi-foreground": txt,
-            # Markdown headings
             "markdown-h1-color": a2, "markdown-h1-background": "transparent",
             "markdown-h1-text-style": "bold",
             "markdown-h2-color": a2, "markdown-h2-background": "transparent",
@@ -1226,1130 +383,1314 @@ class TermApp(App):
             "markdown-h5-text-style": "bold",
             "markdown-h6-color": mut, "markdown-h6-background": "transparent",
             "markdown-h6-text-style": "bold",
-            # Custom variables used in CSS
             "bg1": bg1, "bg2": bg2, "bg3": bg3,
             "accent1": a1, "accent2": a2, "accent3": a3, "accent4": a4,
             "muted": mut,
         }
 
-    # ------------------------------------------------------------ compose
+    # --------------------------------------------------------------- composicion
 
     def compose(self) -> ComposeResult:
-        theme_name = THEMES.get(self.theme_key, THEMES["neon"])["name"]
+        theme_name = THEMES.get(self.theme_key, THEMES[DEFAULT_THEME])["name"]
         yield Horizontal(
             Label("[bold]TERM[/]", id="top-bar-title"),
-            Button(f"Tema: {theme_name}", id="theme-cycle-btn"),
+            Button(f"{self._t('theme_set')}: {theme_name}", id="theme-cycle-btn"),
             id="top-bar",
         )
         with Horizontal(id="main"):
-            with Vertical(id="chat-col"):
-                with TabbedContent(id="main-tabs"):
-                    tab_id = self._next_tab_id()
-                    chat = ChatTab(
-                        self.current_model, tab_id, self.theme_key, self.workdir,
-                    )
-                    self._tabs[tab_id] = chat
-                    with TabPane("Chat", id=f"pane-{tab_id}"):
-                        yield chat
+            with Vertical(id="chat-col"), TabbedContent(id="main-tabs"):
+                tab_id = self._next_tab_id()
+                chat = ChatTab(
+                    self.current_model, tab_id, self.theme_key, self.workdir
+                )
+                self._tabs[tab_id] = chat
+                with TabPane("Chat", id=f"pane-{tab_id}"):
+                    yield chat
             with Vertical(id="file-panel"):
                 yield Label(self.workdir, id="file-panel-title")
                 yield ListView(id="file-list")
         yield Horizontal(
             Label("", id="status-effort"),
-            Label("  ", id="status-sep1"),
+            Label("  ", classes="status-sep"),
             Label("", id="status-context"),
-            Label("  ", id="status-sep2"),
+            Label("  ", classes="status-sep"),
+            Label("", id="status-cost"),
+            Label("  ", classes="status-sep"),
             Label("", id="status-model"),
-            Label("  ", id="status-sep3"),
+            Label("  ", classes="status-sep"),
+            Label("", id="status-git"),
+            Label("  ", classes="status-sep"),
             Label("", id="status-workdir"),
             id="status-bar",
         )
         yield Footer()
 
-    # ------------------------------------------------------------ lifecycle
-
-    def _update_tab_labels(self) -> None:
-        """Update tab labels: active tab shows ' x' when 2+ tabs exist."""
-        try:
-            tc = self.query_one("#main-tabs", TabbedContent)
-            active = tc.active
-            for tid, chat in self._tabs.items():
-                pane_id = f"pane-{tid}"
-                try:
-                    tab = tc.get_tab(pane_id)
-                    label_text = str(tab.label)
-                    # Strip existing ' x' suffix
-                    if label_text.endswith(" x"):
-                        label_text = label_text[:-2]
-                    if pane_id == active and len(self._tabs) > 1:
-                        tab.label = label_text + " x"
-                    else:
-                        tab.label = label_text
-                except Exception:
-                    pass
-        except NoMatches:
-            pass
-
-    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
-        """When a tab is activated, update labels to show/hide close indicator."""
-        self._update_tab_labels()
+    # ----------------------------------------------------------------- arranque
 
     async def on_mount(self) -> None:
+        if self._show_files:
+            self.query_one("#file-panel").add_class("visible")
+        self._refresh_git()
         self._refresh_status()
         self._refresh_file_panel()
+        self._refresh_hint()
+
+        if not claude_available():
+            await self._post_error(self._first_tab_id(), self._t("claude_missing"))
+
         if not self._permissions_granted:
-            # Schedule permissions dialog after mount completes
-            self.set_timer(0.1, self._show_permissions_dialog_deferred)
+            self.set_timer(0.1, lambda: self.run_worker(self._ask_permissions()))
         else:
-            try:
-                first = next(iter(self._tabs.values()))
-                self.query_one(f"#input-{first.tab_id}", Input).focus()
-            except (NoMatches, StopIteration):
-                pass
+            self._focus_input(self._first_tab_id())
 
-    def _show_permissions_dialog_deferred(self) -> None:
-        """Schedule the async permissions dialog from a sync timer callback."""
-        self.run_worker(self._show_permissions_dialog(), exclusive=True)
-
-    async def _show_permissions_dialog(self) -> None:
-        self._awaiting_permissions = True
-        first_tab = next(iter(self._tabs.values()), None)
-        if not first_tab:
-            return
-        try:
-            msgs = self.query_one(f"#msgs-{first_tab.tab_id}", VerticalScroll)
-            try:
-                self.query_one(f"#empty-{first_tab.tab_id}").remove()
-            except NoMatches:
-                pass
-            perm_text = (
-                f"[bold]{self._t('perms_title')}[/]\n\n"
-                f"{self._t('perms_accept')}\n\n"
-                f"  [bold]{self._t('perms_apps')}[/]\n"
-                f"  [bold]{self._t('perms_files')}[/]\n"
-                f"  [bold]{self._t('perms_system')}[/]\n"
-                f"  [bold]{self._t('perms_config')}[/]\n"
-                f"  [bold]{self._t('perms_net')}[/]\n\n"
-                f"{self._t('perms_local')}\n"
-                f"{self._t('perms_oauth')}\n\n"
-                f"[bold]{self._t('perms_question')}[/]"
-            )
-            await msgs.mount(Static(perm_text, classes="info-block", id="perm-dialog"))
-            msgs.scroll_end(animate=False)
-        except NoMatches:
-            pass
-
-    # ------------------------------------------------------------ theme watcher
-
-    def watch_theme_key(self, value: str) -> None:
-        """Force CSS variable re-evaluation when theme changes."""
-        if not self.is_running:
-            return
-        self._refresh_status()
-        # Update theme button label
-        try:
-            theme_name = THEMES.get(value, THEMES["neon"])["name"]
-            self.query_one("#theme-cycle-btn", Button).label = f"Tema: {theme_name}"
-        except NoMatches:
-            pass
-        # Force full CSS refresh
-        new_vars = self.get_css_variables()
-        self.stylesheet.set_variables(new_vars)
-        self.stylesheet.reparse()
-        self.screen.update_node_styles()
-        self.screen.refresh(layout=True)
-
-    # ------------------------------------------------------------ helpers
+    def _first_tab_id(self) -> str:
+        return next(iter(self._tabs), "")
 
     def _next_tab_id(self) -> str:
         self.tab_counter += 1
         return f"chat{self.tab_counter}"
 
-    def _refresh_status(self) -> None:
-        pct = min(100, int(self._context_tokens / self._max_context * 100))
-        bar_len = 15
-        filled = int(pct / 100 * bar_len)
-        bar = ">" * filled + "-" * (bar_len - filled)
+    def _focus_input(self, tab_id: str) -> None:
+        with contextlib.suppress(NoMatches):
+            self.query_one(f"#input-{tab_id}", ChatInput).focus()
+
+    # ------------------------------------------------------------ tema en vivo
+
+    def watch_theme_key(self, value: str) -> None:
+        if not self.is_running:
+            return
+        self._refresh_status()
         try:
-            self.query_one("#status-effort", Label).update(
-                f"[bold]{self._t('effort_label')}:[/] {self.effort}"
+            name = THEMES.get(value, THEMES[DEFAULT_THEME])["name"]
+            self.query_one("#theme-cycle-btn", Button).label = (
+                f"{self._t('theme_set')}: {name}"
             )
-            self.query_one("#status-context", Label).update(
-                f"[bold]{self._t('context_label')}:[/] [{bar}] {pct}% ({self._context_tokens:,}/{self._max_context:,})"
-            )
-            model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
-            self.query_one("#status-model", Label).update(
-                f"[bold]{self._t('model_label')}:[/] {model_name}"
-            )
-            wd = self.workdir
-            if len(wd) > 30:
-                wd = "..." + wd[-27:]
-            self.query_one("#status-workdir", Label).update(f"[bold]{self._t('dir_label')}:[/] {wd}")
         except NoMatches:
             pass
+        self.stylesheet.set_variables(self.get_css_variables())
+        self.stylesheet.reparse()
+        self.screen.update_node_styles()
+        self.screen.refresh(layout=True)
+        self._persist()
 
-    def _persist_config(self) -> None:
-        _save_config({
+    def watch_effort(self, value: str) -> None:
+        if self.is_running:
+            self._refresh_status()
+            self._persist()
+
+    def watch_current_model(self, value: str) -> None:
+        if self.is_running:
+            self._refresh_status()
+            self._persist()
+
+    def _persist(self) -> None:
+        """Guardar la configuracion en cuanto cambia algo.
+
+        Antes solo se guardaba con /save, asi que cerrar Term perdia el tema,
+        el modelo y el directorio que acababas de elegir.
+        """
+        self._cfg.update({
             "theme": self.theme_key,
             "workdir": self.workdir,
             "effort": self.effort,
             "model": self.current_model,
             "permissions_granted": self._permissions_granted,
             "lang": self._lang,
+            "default_browser": self._default_browser,
+            "permission_mode": self._permission_mode,
+            "show_file_panel": self._show_files,
         })
+        cfg_mod.save_config(self._cfg)
+
+    # ------------------------------------------------------------ barra de estado
+
+    def _refresh_git(self) -> None:
+        self._git_branch = sysctl.git_branch(self.workdir)
+
+    def _refresh_status(self) -> None:
+        chat = self._active_chat()
+        usage = chat.session.usage if chat else None
+
+        window = (usage.context_window if usage and usage.context_window else 0) or 200_000
+        used = usage.context_tokens if usage else 0
+        pct = min(100, int(used / window * 100)) if window else 0
+        filled = int(pct / 100 * 15)
+        bar = ">" * filled + "-" * (15 - filled)
+
+        def put(selector: str, text: str) -> None:
+            with contextlib.suppress(NoMatches):
+                self.query_one(selector, Label).update(text)
+
+        put("#status-effort", f"[bold]{self._t('effort_label')}:[/] {self.effort}")
+        put("#status-context",
+            f"[bold]{self._t('context_label')}:[/] [{bar}] {pct}% "
+            f"({used:,}/{window:,})")
+
+        cost = usage.total_cost_usd if usage else 0.0
+        put("#status-cost",
+            f"[bold]{self._t('cost_label')}:[/] ${cost:.4f}" if cost else "")
+
+        model_key = chat.model_key if chat else self.current_model
+        put("#status-model", f"[bold]{self._t('model_label')}:[/] {model_label(model_key)}")
+        put("#status-git", f" {self._git_branch}" if self._git_branch else "")
+
+        wd = self.workdir
+        home = str(Path.home())
+        if wd.startswith(home):
+            wd = "~" + wd[len(home):]
+        if len(wd) > 28:
+            wd = "..." + wd[-25:]
+        put("#status-workdir", f"[bold]{self._t('dir_label')}:[/] {wd}")
+
+    def _refresh_hint(self) -> None:
+        chat = self._active_chat()
+        if chat is None:
+            return
+        parts = [self._t("multiline_hint")]
+        if chat.attachments:
+            parts.append(self._t("attach_pending", count=len(chat.attachments)))
+        with contextlib.suppress(NoMatches):
+            self.query_one(f"#hint-{chat.tab_id}", Label).update(
+                "[dim]" + "  ·  ".join(parts) + "[/]"
+            )
+
+    # ------------------------------------------------------------ panel de archivos
 
     def _refresh_file_panel(self) -> None:
-        """Refresh file panel with contents of current workdir."""
         try:
             lv = self.query_one("#file-list", ListView)
-            lv.clear()
             title = self.query_one("#file-panel-title", Label)
-            wd = self.workdir
-            if len(wd) > 24:
-                wd = "..." + wd[-21:]
-            title.update(wd)
-            workpath = Path(self.workdir)
-            if not workpath.is_dir():
-                return
-            # Parent directory entry
-            lv.append(ListItem(Label("[dir] ..")))
-            entries = sorted(workpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-            for entry in entries:
-                if entry.name.startswith("."):
-                    continue
-                if entry.is_dir():
-                    lv.append(ListItem(Label(f"[dir] {entry.name}")))
-                else:
-                    lv.append(ListItem(Label(entry.name)))
-        except (NoMatches, OSError):
-            pass
+        except NoMatches:
+            return
+        lv.clear()
+        wd = self.workdir
+        title.update(f"[bold]{Path(wd).name or wd}[/]")
+        workpath = Path(wd)
+        if not workpath.is_dir():
+            return
+        lv.append(ListItem(Label("[dir] ..")))
+        try:
+            entries = sorted(
+                workpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+            )
+        except OSError:
+            return
+        for entry in entries:
+            if entry.name.startswith("."):
+                continue
+            label = f"[dir] {entry.name}" if entry.is_dir() else entry.name
+            lv.append(ListItem(Label(label)))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """When a file is selected in the file panel, handle navigation or attach."""
         try:
-            label_widget = event.item.query_one(Label)
-            text = str(label_widget.renderable)
+            text = str(event.item.query_one(Label).renderable)
         except Exception:
             return
         if text == "[dir] ..":
-            parent = str(Path(self.workdir).parent)
-            self.workdir = parent
-            for chat in self._tabs.values():
-                chat.workdir = parent
-            self._refresh_status()
-            self._refresh_file_panel()
+            self._set_workdir(str(Path(self.workdir).parent))
             return
         if text.startswith("[dir] "):
-            dirname = text.replace("[dir] ", "")
-            new_path = str(Path(self.workdir) / dirname)
-            if os.path.isdir(new_path):
-                self.workdir = new_path
-                for chat in self._tabs.values():
-                    chat.workdir = new_path
-                self._refresh_status()
-                self._refresh_file_panel()
+            target = Path(self.workdir) / text[6:]
+            if target.is_dir():
+                self._set_workdir(str(target))
             return
-        # Regular file -- append path to active input
-        file_path = str(Path(self.workdir) / text)
-        tab_id = self._active_tab_id()
-        if tab_id:
-            try:
-                inp = self.query_one(f"#input-{tab_id}", Input)
-                current = inp.value
-                if current:
-                    inp.value = current + " " + file_path
-                else:
-                    inp.value = file_path
-                inp.focus()
-            except NoMatches:
-                pass
+        # Un archivo se anade a la entrada activa para poder referirlo.
+        chat = self._active_chat()
+        if chat is None:
+            return
+        path = str(Path(self.workdir) / text)
+        try:
+            inp = self.query_one(f"#input-{chat.tab_id}", ChatInput)
+        except NoMatches:
+            return
+        inp.text = f"{inp.text} {path}".strip() if inp.text else path
+        inp.move_cursor(inp.document.end)
+        inp.focus()
+
+    def _set_workdir(self, path: str) -> None:
+        if not os.path.isdir(path):
+            self.notify(f"{self._t('not_found')}: {path}", timeout=2)
+            return
+        self.workdir = path
+        for chat in self._tabs.values():
+            chat.workdir = path
+        self._refresh_git()
+        self._refresh_status()
+        self._refresh_file_panel()
+        self._persist()
+
+    # ------------------------------------------------------------ acceso a tabs
+
+    def _active_pane(self) -> str:
+        try:
+            return self.query_one("#main-tabs", TabbedContent).active or ""
+        except NoMatches:
+            return ""
 
     def _active_tab_id(self) -> str | None:
-        """Return the tab_id of the currently active chat pane, or None."""
-        try:
-            tc = self.query_one("#main-tabs", TabbedContent)
-            active = tc.active
-            if active and active.startswith("pane-chat"):
-                return active.replace("pane-", "")
-        except NoMatches:
-            pass
+        pane = self._active_pane()
+        if pane.startswith("pane-chat"):
+            return pane[5:]
         return None
 
-    # ------------------------------------------------------------ panel switching
+    def _active_chat(self) -> ChatTab | None:
+        tab_id = self._active_tab_id()
+        return self._tabs.get(tab_id) if tab_id else None
 
-    async def _show_panel(self, panel: str) -> None:
-        self._active_panel = panel
-        tc = self.query_one("#main-tabs", TabbedContent)
+    def _active_panel_name(self) -> str | None:
+        """Nombre del panel abierto (help, apps...), o None si hay un chat."""
+        pane = self._active_pane()
+        for panel in _PANELS:
+            if pane == f"pane-{panel}":
+                return panel
+        return None
 
-        if panel == "chat":
-            for tid in self._tabs:
-                tc.active = f"pane-{tid}"
-                break
-            return
-
-        pane_id = f"pane-{panel}"
+    async def _msgs(self, tab_id: str) -> VerticalScroll | None:
         try:
-            await tc.remove_pane(pane_id)
-        except Exception:
-            pass
+            return self.query_one(f"#msgs-{tab_id}", VerticalScroll)
+        except NoMatches:
+            return None
 
-        pane = TabPane(panel.capitalize(), id=pane_id)
-        await tc.add_pane(pane)
-        tc.active = pane_id
+    async def _post(self, tab_id: str, widget: Static) -> None:
+        area = await self._msgs(tab_id)
+        if area is None:
+            return
+        await area.mount(widget)
+        area.scroll_end(animate=False)
 
-        if panel == "settings":
-            theme_name = THEMES[self.theme_key]["name"]
-            model_name = AI_MODELS.get(self.current_model, AI_MODELS["claude"])["name"]
-            content = (
-                f"[bold]{self._t('settings_title')}[/]\n\n"
-                f"{self._t('theme_set')}: [bold]{theme_name}[/]\n"
-                f"  {self._t('available')}: {', '.join(THEMES.keys())}\n"
-                f"  {self._t('change_cmd')}: [bold]/theme <nombre>[/]\n\n"
-                f"{self._t('model_label')}: [bold]{model_name}[/]\n"
-                f"  {self._t('available')}: {', '.join(AI_MODELS.keys())}\n"
-                f"  {self._t('change_cmd')}: [bold]/model <nombre>[/]\n\n"
-                f"{self._t('effort_label')}: [bold]{self.effort}[/]\n"
-                f"  {self._t('levels')}: {', '.join(EFFORT_LEVELS)}\n"
-                f"  {self._t('change_cmd')}: [bold]/effort <nivel>[/]\n\n"
-                f"{self._t('dir_label')}: [bold]{self.workdir}[/]\n"
-                f"  {self._t('change_cmd')}: [bold]/workdir <ruta>[/]\n\n"
-                f"[bold]{self._t('save_cmd')}[/]"
-            )
-            await pane.mount(Static(content, classes="panel"))
+    async def _post_info(self, tab_id: str, text: str, widget_id: str = "") -> None:
+        kwargs = {"id": widget_id} if widget_id else {}
+        await self._post(tab_id, Static(text, classes="info-block", **kwargs))
 
-        elif panel == "apps":
-            cats: dict[str, list[dict]] = {}
-            for app in self._apps:
-                cats.setdefault(app["category"], []).append(app)
-            lines = [f"[bold]{self._t('cli_apps_title')}[/]\n"]
-            for cat, items in cats.items():
-                lines.append(f"\n[bold]{cat}[/]")
-                for it in items:
-                    lines.append(f"  {it['name']} [dim]({it['cmd']})[/]")
-            lines.append(
-                f"\n[dim]{self._t('apps_hint')}[/]"
-            )
-            await pane.mount(Static("\n".join(lines), classes="panel"))
+    async def _post_error(self, tab_id: str, text: str) -> None:
+        await self._post(tab_id, Static(text, classes="error-block"))
 
-        elif panel == "tools":
-            checks = [
-                ("Claude CLI", "claude", "IA principal"),
-                ("Git", "git", "Control de versiones"),
-                ("Node.js", "node", "Runtime JS"),
-                ("Python", "python3", "Runtime Python"),
-                ("Docker", "docker", "Contenedores"),
-                ("osascript", "osascript", "Control del sistema macOS"),
-            ]
-            lines = [f"[bold]{self._t('tools_title')}[/]\n"]
-            for name, cmd, desc in checks:
-                found = shutil.which(cmd) is not None
-                marker = "[green bold]OK[/]" if found else "[red]NO[/]"
-                lines.append(f"  {marker} [bold]{name}[/] - {desc}")
-            await pane.mount(Static("\n".join(lines), classes="panel"))
+    def _clear_empty_state(self, tab_id: str) -> None:
+        with contextlib.suppress(NoMatches):
+            self.query_one(f"#empty-{tab_id}").remove()
 
-        elif panel == "help":
-            models_info = []
-            for k, m in AI_MODELS.items():
-                connected = shutil.which(m["cmd"][0]) is not None
-                status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
-                models_info.append(f"  [bold]{m['name']}[/] ({k}) {status}")
-
-            lines = [
-                _build_logo(self.theme_key),
-                "",
-                f"[bold]Term[/] -- {self._t('term_subtitle')}",
-                "",
-                f"[bold]{self._t('what_is')}[/]",
-                f"  {self._t('what_is_desc')}",
-                "",
-                f"[bold]{self._t('models_available')}:[/]",
-                *models_info,
-                "",
-                f"[bold]{self._t('commands_title')}:[/]",
-            ]
-            for cmd, desc in COMMANDS_HELP.items():
-                lines.append(f"  [bold]{cmd:28s}[/] {desc}")
-            lines.append("")
-            lines.append(f"[bold]{self._t('shortcuts_title')}:[/]")
-            for key, desc in SHORTCUTS_HELP.items():
-                lines.append(f"  [bold]{key:28s}[/] {desc}")
-            lines.extend([
-                "",
-                f"[bold]{self._t('system_examples')}:[/]",
-                "  'abrir Safari'",
-                "  'siguiente cancion en Spotify'",
-                "  'pon el volumen a 50'",
-                "  'abre la terminal'",
-                "",
-                f"[dim]{self._t('config_path', path=CONFIG_PATH)}[/]",
-            ])
-            await pane.mount(Static("\n".join(lines), classes="panel"))
-
-    def _show_panel_sync(self, panel: str) -> None:
-        self.run_worker(self._show_panel(panel), exclusive=True)
-
-    # ------------------------------------------------------------ button handler
+    # ------------------------------------------------------------ boton del tema
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "theme-cycle-btn":
-            keys = list(THEMES.keys())
+            keys = theme_names()
             idx = keys.index(self.theme_key) if self.theme_key in keys else 0
             self.theme_key = keys[(idx + 1) % len(keys)]
 
-    # ------------------------------------------------------------ input handler
+    # ------------------------------------------------------------ tabs y paneles
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """Show command suggestions when typing /."""
-        iid = event.input.id or ""
-        if not iid.startswith("input-chat"):
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        self._refresh_status()
+        self._refresh_hint()
+
+    async def _create_tab(self, name: str | None = None, model_key: str | None = None) -> None:
+        tab_id = self._next_tab_id()
+        chat = ChatTab(
+            model_key or self.current_model, tab_id, self.theme_key, self.workdir
+        )
+        self._tabs[tab_id] = chat
+        chat.title = name or f"Chat {len(self._tabs)}"
+
+        tc = self.query_one("#main-tabs", TabbedContent)
+        pane = TabPane(chat.title, id=f"pane-{tab_id}")
+        await tc.add_pane(pane)
+        await pane.mount(chat)
+        tc.active = f"pane-{tab_id}"
+        self.call_after_refresh(self._focus_input, tab_id)
+
+    async def action_new_tab(self) -> None:
+        await self._create_tab()
+
+    def action_goto_tab(self, number: int) -> None:
+        ids = list(self._tabs)
+        if 1 <= number <= len(ids):
+            with contextlib.suppress(NoMatches):
+                self.query_one("#main-tabs", TabbedContent).active = f"pane-{ids[number - 1]}"
+
+    async def action_close_active(self) -> None:
+        """ctrl+w cierra tanto un panel como una tab.
+
+        Antes solo cerraba tabs de chat, asi que abrir /help dejaba una pestana
+        que no habia forma de cerrar.
+        """
+        panel = self._active_panel_name()
+        if panel:
+            await self._close_panel(panel)
             return
-        tab_id = iid.replace("input-", "")
-        text = event.value
+        await self._close_tab()
+
+    async def _close_panel(self, panel: str) -> None:
+        tc = self.query_one("#main-tabs", TabbedContent)
+        with contextlib.suppress(Exception):
+            await tc.remove_pane(f"pane-{panel}")
+        first = self._first_tab_id()
+        if first:
+            tc.active = f"pane-{first}"
+            self._focus_input(first)
+
+    async def _close_tab(self) -> None:
+        tab_id = self._active_tab_id()
+        if tab_id is None:
+            return
+        if len(self._tabs) <= 1:
+            self.notify(self._t("cannot_close_last"), timeout=1)
+            return
+        chat = self._tabs.pop(tab_id, None)
+        if chat and chat.session.proc:
+            with contextlib.suppress(ProcessLookupError, OSError):
+                chat.session.proc.kill()
+        tc = self.query_one("#main-tabs", TabbedContent)
+        with contextlib.suppress(Exception):
+            await tc.remove_pane(f"pane-{tab_id}")
+
+    def action_toggle_files(self) -> None:
+        try:
+            panel = self.query_one("#file-panel")
+        except NoMatches:
+            return
+        panel.toggle_class("visible")
+        self._show_files = panel.has_class("visible")
+        if self._show_files:
+            self._refresh_file_panel()
+        self._persist()
+
+    def action_cycle_effort(self) -> None:
+        idx = EFFORT_LEVELS.index(self.effort) if self.effort in EFFORT_LEVELS else 2
+        self.effort = EFFORT_LEVELS[(idx + 1) % len(EFFORT_LEVELS)]
+        self.notify(f"{self._t('effort_set')}: {self.effort}", timeout=1)
+
+    def action_clear_tab(self) -> None:
+        self.run_worker(self._clear_tab())
+
+    async def _clear_tab(self) -> None:
+        """Vaciar el chat y abrir una sesion nueva.
+
+        Limpiar la pantalla sin reiniciar la sesion dejaba a Claude recordando
+        una conversacion que el usuario ya no veia.
+        """
+        chat = self._active_chat()
+        if chat is None:
+            return
+        area = await self._msgs(chat.tab_id)
+        if area is not None:
+            await area.remove_children()
+        chat.session.reset()
+        chat.message_count = 0
+        chat.last_response = ""
+        chat.attachments.clear()
+        chat.assistant_widget = None
+        await self._post_info(
+            chat.tab_id, build_logo(self.theme_key), widget_id=f"empty-{chat.tab_id}"
+        )
+        self._refresh_status()
+        self._refresh_hint()
+        self.notify(self._t("session_cleared"), timeout=3)
+
+    async def action_cancel(self) -> None:
+        """Esc cancela la generacion, o cierra el panel si no hay nada corriendo."""
+        panel = self._active_panel_name()
+        if panel:
+            await self._close_panel(panel)
+            return
+        chat = self._active_chat()
+        if chat is None or not chat.is_loading:
+            return
+        proc = chat.session.proc
+        if proc is not None:
+            with contextlib.suppress(ProcessLookupError, OSError):
+                proc.terminate()
+        self.notify(self._t("cancelled"), timeout=2)
+
+    def action_copy_last(self) -> None:
+        chat = self._active_chat()
+        if chat is None or not chat.last_response:
+            self.notify(self._t("no_response_copy"), timeout=2)
+            return
+        result = sysctl.copy_to_clipboard(chat.last_response)
+        self.notify(
+            self._t("copied") if result else self._t("copy_error", err=result.reason),
+            timeout=2,
+        )
+
+    # ------------------------------------------------------------ entrada
+
+    def on_chat_input_complete_requested(self, event: ChatInput.CompleteRequested) -> None:
+        """Tab autocompleta el comando a medio escribir."""
+        try:
+            inp = self.query_one(f"#input-{event.tab_id}", ChatInput)
+        except NoMatches:
+            return
+        completed, matches = complete_command(inp.text.strip())
+        if matches:
+            inp.text = completed
+            inp.move_cursor(inp.document.end)
+        self._show_suggestions(event.tab_id, inp.text)
+
+    def on_chat_input_history_move(self, event: ChatInput.HistoryMove) -> None:
+        """Recorrer los mensajes ya enviados con las flechas."""
+        chat = self._tabs.get(event.tab_id)
+        if chat is None or not chat.history:
+            return
+        try:
+            inp = self.query_one(f"#input-{event.tab_id}", ChatInput)
+        except NoMatches:
+            return
+        pos = chat.history_pos + event.delta
+        pos = max(0, min(len(chat.history), pos))
+        chat.history_pos = pos
+        inp.text = "" if pos == len(chat.history) else chat.history[pos]
+        inp.move_cursor(inp.document.end)
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        area = event.text_area
+        if isinstance(area, ChatInput):
+            self._show_suggestions(area.tab_id, area.text)
+
+    def _show_suggestions(self, tab_id: str, text: str) -> None:
+        """Lista de comandos que encajan con lo que se lleva escrito."""
         try:
             sug = self.query_one(f"#cmdsug-{tab_id}", Static)
         except NoMatches:
             return
-
-        if text.startswith("/") and not text.startswith("/ "):
-            query = text.lower()
-            slash_cmds = {k: v for k, v in COMMANDS_HELP.items() if k.startswith("/")}
-            matches = []
-            for c, d in slash_cmds.items():
-                if query == "/" or c.lower().startswith(query.split()[0]):
-                    matches.append(f"  [bold]{c}[/]  [dim]{d}[/]")
-            if matches:
-                sug.update("\n".join(matches[:10]))
-                sug.add_class("visible")
-            else:
-                sug.update("")
-                sug.remove_class("visible")
+        stripped = text.strip()
+        if not stripped.startswith("/") or "\n" in text:
+            sug.update("")
+            sug.remove_class("visible")
+            return
+        head = stripped.split()[0].lower()
+        matches = [
+            f"  [bold]{cmd}[/]  [dim]{desc}[/]"
+            for cmd, desc in COMMANDS_HELP.items()
+            if stripped == "/" or cmd.split()[0].startswith(head)
+        ]
+        if matches:
+            sug.update("\n".join(matches[:10]))
+            sug.add_class("visible")
         else:
             sug.update("")
             sug.remove_class("visible")
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        iid = event.input.id or ""
-        if not iid.startswith("input-chat"):
-            return
-
-        raw = event.value
-        text = raw.strip()
-        if not text:
-            return
-
-        tab_id = iid.replace("input-", "")
-
-        # Hide command suggestions
+    async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
+        tab_id = event.tab_id
+        text = event.text.strip()
         try:
-            self.query_one(f"#cmdsug-{tab_id}", Static).remove_class("visible")
+            inp = self.query_one(f"#input-{tab_id}", ChatInput)
         except NoMatches:
-            pass
-
-        # Permissions dialog response
-        if self._awaiting_permissions:
-            event.input.value = ""
-            self._awaiting_permissions = False
-            try:
-                self.query_one("#perm-dialog").remove()
-            except NoMatches:
-                pass
-            if text.lower() in ("s", "si", "y", "yes", "1"):
-                self._permissions_granted = True
-                cfg = _load_config()
-                cfg["permissions_granted"] = True
-                _save_config(cfg)
-                self.notify(self._t("perms_granted"), timeout=2)
-                first_tab = next(iter(self._tabs.values()), None)
-                if first_tab:
-                    try:
-                        msgs = self.query_one(f"#msgs-{first_tab.tab_id}", VerticalScroll)
-                        logo = _build_logo(self.theme_key)
-                        model = AI_MODELS.get(first_tab.model_key, AI_MODELS["claude"])
-                        await msgs.mount(Static(
-                            logo + "\n\n"
-                            f"[dim]{model['name']} | {self._t('write_or_help')}[/]",
-                            classes="info-block",
-                        ))
-                    except NoMatches:
-                        pass
-            else:
-                self.notify(self._t("perms_denied"), timeout=3)
             return
 
-        # Model selection flow for /new
-        if self._awaiting_model_selection == tab_id:
-            event.input.value = ""
-            self._awaiting_model_selection = None
-            try:
-                self.query_one("#model-selector").remove()
-            except NoMatches:
-                pass
-            model_keys = list(AI_MODELS.keys())
-            selected: str | None = None
-            if text.isdigit() and 1 <= int(text) <= len(model_keys):
-                selected = model_keys[int(text) - 1]
-            elif text in AI_MODELS:
-                selected = text
-            else:
-                self.notify(self._t("invalid_model", text=text), timeout=2)
-                return
-            await self._create_tab(self._pending_new_tab_name, selected)
-            self._pending_new_tab_name = None
+        with contextlib.suppress(NoMatches):
+            self.query_one(f"#cmdsug-{tab_id}", Static).remove_class("visible")
+
+        # Un dialogo abierto (permisos, eleccion de modelo o de navegador)
+        # se queda con lo que se escriba antes que el chat.
+        if self._awaiting and self._awaiting_tab == tab_id:
+            inp.text = ""
+            await self._handle_dialog(text, tab_id)
             return
 
-        # Browser selection flow for /browse
-        if self._awaiting_browser_selection == tab_id:
-            event.input.value = ""
-            self._awaiting_browser_selection = None
-            try:
-                self.query_one("#browser-selector").remove()
-            except NoMatches:
-                pass
-            selected_browser = None
-            if text.isdigit() and 1 <= int(text) <= len(self._browsers):
-                selected_browser = self._browsers[int(text) - 1]["app"]
-            else:
-                for b in self._browsers:
-                    if text.lower() in b["name"].lower() or text.lower() in b["app"].lower():
-                        selected_browser = b["app"]
-                        break
-            if selected_browser:
-                url = self._pending_browse_url or "https://www.google.com"
-                subprocess.Popen(["open", "-a", selected_browser, url])
-                self.notify(self._t("opening", name=selected_browser), timeout=1)
-            else:
-                self.notify(self._t("browser_not_found", text=text), timeout=2)
-            self._pending_browse_url = ""
+        if not text:
             return
 
         chat = self._tabs.get(tab_id)
         if chat is None or chat.is_loading:
             return
 
-        event.input.value = ""
+        inp.text = ""
+        chat.history.append(text)
+        chat.history_pos = len(chat.history)
 
-        # Bare "/" shows command list
         if text == "/":
             lines = [f"[bold]{self._t('commands_available')}:[/]\n"]
-            for c, d in COMMANDS_HELP.items():
-                lines.append(f"  [bold]{c:28s}[/] {d}")
-            try:
-                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                await msgs.mount(Static("\n".join(lines), classes="info-block"))
-                msgs.scroll_end(animate=False)
-            except NoMatches:
-                pass
+            lines += [f"  [bold]{c:26s}[/] {d}" for c, d in COMMANDS_HELP.items()]
+            await self._post_info(tab_id, "\n".join(lines))
             return
 
         if text.startswith("/"):
             await self._handle_command(text, tab_id)
             return
 
-        # Remove empty-state placeholder
-        try:
-            self.query_one(f"#empty-{tab_id}").remove()
-        except NoMatches:
-            pass
+        await self._send_message(chat, text)
 
-        # Mount user message
-        try:
-            msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-        except NoMatches:
+    # ------------------------------------------------------------ envio
+
+    async def _send_message(self, chat: ChatTab, text: str) -> None:
+        self._clear_empty_state(chat.tab_id)
+        area = await self._msgs(chat.tab_id)
+        if area is None:
             return
-        await msgs.mount(UserMessage(text))
 
-        # Mount assistant placeholder
+        await area.mount(UserMessage(text))
         assistant = AssistantMessage()
-        await msgs.mount(assistant)
+        await area.mount(assistant)
         chat.assistant_widget = assistant
         chat.message_count += 1
-        msgs.scroll_end(animate=False)
+        area.scroll_end(animate=False)
+
+        prompt = text
+        if chat.attachments:
+            blocks = [
+                f"[Archivo adjunto: {path}]\n```\n{content}\n```"
+                for path, content in chat.attachments
+            ]
+            prompt = "\n\n".join(blocks) + "\n\n" + text
+            chat.attachments.clear()
+            self._refresh_hint()
+
+        if not chat.title:
+            chat.title = text[:24]
 
         chat.is_loading = True
-        try:
-            self.query_one(f"#load-{tab_id}", Label).add_class("visible")
-        except NoMatches:
-            pass
-
-        # Prepend attached file content if any
-        prompt = text
-        if self._attached_content:
-            prompt = self._attached_content + text
-            self._attached_content = ""
-
+        self._set_loading(chat.tab_id, self._t("processing"))
         self._run_ai(chat, prompt)
 
-    # ------------------------------------------------------------ slash commands
+    def _set_loading(self, tab_id: str, text: str) -> None:
+        try:
+            label = self.query_one(f"#load-{tab_id}", Label)
+        except NoMatches:
+            return
+        if text:
+            label.update(text)
+            label.add_class("visible")
+        else:
+            label.remove_class("visible")
+
+    @work(exclusive=False)
+    async def _run_ai(self, chat: ChatTab, prompt: str) -> None:
+        """Un turno de conversacion, pintando los eventos segun llegan."""
+        assistant = chat.assistant_widget
+        area = await self._msgs(chat.tab_id)
+        errored = False
+
+        try:
+            stream = chat.session.run(
+                prompt,
+                model=chat.model_key,
+                effort=self.effort,
+                workdir=chat.workdir or self.workdir,
+                system_prompt=build_system_context(self._lang, macos=sysctl.IS_MACOS),
+                permission_mode=self._permission_mode,
+                restricted=not self._permissions_granted,
+            )
+            async for event in stream:
+                if event.kind == "text" and assistant is not None:
+                    await assistant.append(event.text)
+                    if area is not None:
+                        area.scroll_end(animate=False)
+
+                elif event.kind == "tool":
+                    self._set_loading(
+                        chat.tab_id, self._t("using_tool", tool=event.tool)
+                    )
+                    if area is not None:
+                        await area.mount(ToolEvent(event.tool, event.detail))
+                        area.scroll_end(animate=False)
+
+                elif event.kind == "result":
+                    if assistant is not None:
+                        # La CLI manda el texto final completo: si los deltas
+                        # parciales no llegaron, esto lo rescata igualmente.
+                        if event.text and not assistant.text.strip():
+                            await assistant.append(event.text)
+                        await assistant.flush()
+                    self._refresh_status()
+
+                elif event.kind == "error":
+                    errored = True
+                    message = (
+                        self._t("claude_missing")
+                        if event.text == "claude-not-found"
+                        else f"Error: {event.text}"
+                    )
+                    await self._post_error(chat.tab_id, message)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # la TUI no debe caerse por un turno fallido
+            await self._post_error(chat.tab_id, f"Error: {exc}")
+            errored = True
+        finally:
+            if assistant is not None:
+                await assistant.flush()
+                chat.last_response = assistant.text
+            chat.is_loading = False
+            chat.assistant_widget = None
+            self._set_loading(chat.tab_id, "")
+            self._refresh_status()
+
+        if not errored:
+            self._store.touch(
+                chat.session.session_id,
+                title=chat.title,
+                workdir=chat.workdir or self.workdir,
+                model=chat.model_key,
+                messages=chat.message_count,
+            )
+
+    # ------------------------------------------------------------ dialogos
+
+    async def _ask_permissions(self) -> None:
+        tab_id = self._first_tab_id()
+        if not tab_id:
+            return
+        self._awaiting = "permissions"
+        self._awaiting_tab = tab_id
+        self._clear_empty_state(tab_id)
+        text = (
+            f"[bold]{self._t('perms_title')}[/]\n\n"
+            f"{self._t('perms_accept')}\n\n"
+            f"  [bold]{self._t('perms_apps')}[/]\n"
+            f"  [bold]{self._t('perms_files')}[/]\n"
+            f"  [bold]{self._t('perms_system')}[/]\n"
+            f"  [bold]{self._t('perms_config')}[/]\n"
+            f"  [bold]{self._t('perms_net')}[/]\n\n"
+            f"{self._t('perms_local')}\n"
+            f"{self._t('perms_oauth')}\n\n"
+            f"[bold]{self._t('perms_question')}[/]"
+        )
+        await self._post_info(tab_id, text, widget_id="dialog")
+        self._focus_input(tab_id)
+
+    async def _handle_dialog(self, text: str, tab_id: str) -> None:
+        kind = self._awaiting
+        self._awaiting = None
+        self._awaiting_tab = ""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#dialog").remove()
+
+        if kind == "permissions":
+            granted = text.lower() in ("s", "si", "sí", "y", "yes", "j", "ja", "1", "")
+            self._permissions_granted = granted
+            self._persist()
+            self.notify(
+                self._t("perms_granted") if granted else self._t("perms_denied"),
+                timeout=3,
+            )
+            await self._post_info(tab_id, build_logo(self.theme_key),
+                                  widget_id=f"empty-{tab_id}")
+            self._focus_input(tab_id)
+
+        elif kind == "model":
+            keys = list(AI_MODELS)
+            choice = None
+            if text.isdigit() and 1 <= int(text) <= len(keys):
+                choice = keys[int(text) - 1]
+            elif text:
+                choice = resolve_model(text)[0]
+            if choice:
+                await self._create_tab(self._pending_tab_name, choice)
+            else:
+                self.notify(self._t("invalid_model", text=text), timeout=2)
+            self._pending_tab_name = None
+
+        elif kind == "browser":
+            app_name = ""
+            if text.isdigit() and 1 <= int(text) <= len(self._browsers):
+                app_name = self._browsers[int(text) - 1]["app"]
+            else:
+                for browser in self._browsers:
+                    if text.lower() in browser["name"].lower():
+                        app_name = browser["app"]
+                        break
+            if app_name:
+                self._open_url(self._pending_url or "https://www.google.com", app_name)
+            else:
+                self.notify(self._t("browser_not_found", text=text), timeout=2)
+            self._pending_url = ""
+
+    def _open_url(self, url: str, browser: str = "") -> None:
+        result = sysctl.open_url(url, browser)
+        if result:
+            self.notify(self._t("opening", name=browser or url), timeout=1)
+        else:
+            self._notify_sys_failure(result)
+
+    def _notify_sys_failure(self, result: sysctl.SysResult) -> None:
+        """Traducir el motivo de un fallo de sistema a algo legible."""
+        reason = result.reason
+        if reason.endswith("|macos-only"):
+            feature = reason.split("|")[0]
+            self.notify(self._t("platform_unsupported", feature=feature), timeout=3)
+        else:
+            self.notify(reason.replace("|", ": "), timeout=3)
+
+    # ------------------------------------------------------------ comandos
 
     async def _handle_command(self, text: str, tab_id: str) -> None:
         parts = text.split(None, 1)
         cmd = parts[0].lower()
         arg = parts[1].strip() if len(parts) > 1 else ""
+        chat = self._tabs.get(tab_id)
 
-        if cmd == "/theme":
-            if arg in THEMES:
-                self.theme_key = arg
-                self.notify(f"{self._t('theme_set')}: {THEMES[arg]['name']}", timeout=1)
-            else:
-                self.notify(f"{self._t('themes_list')}: {', '.join(THEMES.keys())}", timeout=3)
+        # -- conversacion ---------------------------------------------------
+        if cmd == "/new":
+            await self._cmd_new(arg, tab_id)
+
+        elif cmd == "/close":
+            await self._close_tab()
+
+        elif cmd == "/clear":
+            await self._clear_tab()
+
+        elif cmd == "/sessions":
+            await self._cmd_sessions(tab_id)
+
+        elif cmd == "/resume":
+            await self._cmd_resume(arg, tab_id)
+
+        elif cmd == "/search":
+            await self._cmd_search(arg, tab_id)
+
+        elif cmd == "/name":
+            if arg and chat:
+                chat.title = arg
+                with contextlib.suppress(Exception):
+                    self.query_one("#main-tabs", TabbedContent).get_tab(
+                        f"pane-{tab_id}"
+                    ).label = arg
+
+        elif cmd == "/history":
+            self.notify(
+                self._t("messages_count", count=chat.message_count if chat else 0),
+                timeout=2,
+            )
+
+        elif cmd == "/export":
+            await self._cmd_export(tab_id)
+
+        elif cmd == "/copy":
+            self.action_copy_last()
+
+        elif cmd == "/code":
+            self._cmd_code(arg, chat)
+
+        # -- configuracion --------------------------------------------------
+        elif cmd == "/model":
+            self._cmd_model(arg, chat)
 
         elif cmd == "/effort":
             if arg in EFFORT_LEVELS:
                 self.effort = arg
-                self._refresh_status()
                 self.notify(f"{self._t('effort_set')}: {arg}", timeout=1)
             else:
                 self.notify(f"{self._t('levels')}: {', '.join(EFFORT_LEVELS)}", timeout=2)
 
-        elif cmd == "/model":
-            if arg in AI_MODELS:
-                self.current_model = arg
-                chat = self._tabs.get(tab_id)
-                if chat:
-                    chat.model_key = arg
-                self._refresh_status()
-                self.notify(f"{self._t('model_set')}: {AI_MODELS[arg]['name']}", timeout=1)
+        elif cmd == "/theme":
+            if arg in THEMES:
+                self.theme_key = arg
+                self.notify(f"{self._t('theme_set')}: {THEMES[arg]['name']}", timeout=1)
             else:
-                self.notify(f"{self._t('models_list')}: {', '.join(AI_MODELS.keys())}", timeout=2)
+                self.notify(f"{self._t('themes_list')}: {', '.join(theme_names())}",
+                            timeout=3)
 
-        elif cmd == "/name":
-            if arg:
-                try:
-                    tc = self.query_one("#main-tabs", TabbedContent)
-                    tab = tc.get_tab(f"pane-{tab_id}")
-                    tab.label = arg
-                except Exception:
-                    pass
+        elif cmd == "/lang":
+            await self._cmd_lang(arg, tab_id)
+
+        elif cmd == "/permissions":
+            self._cmd_permissions(arg)
 
         elif cmd == "/workdir":
-            if arg:
-                expanded = os.path.expanduser(arg)
-                if os.path.isdir(expanded):
-                    self.workdir = expanded
-                    chat = self._tabs.get(tab_id)
-                    if chat:
-                        chat.workdir = expanded
-                    self._refresh_status()
-                    self._refresh_file_panel()
-                    self.notify(f"{self._t('dir_set')}: {expanded}", timeout=1)
-                else:
-                    self.notify(f"{self._t('not_found')}: {arg}", timeout=2)
-
-        elif cmd == "/new":
-            tokens = arg.split() if arg else []
-            name: str | None = None
-            model: str | None = None
-            for tok in tokens:
-                if tok in AI_MODELS:
-                    model = tok
-                elif name is None:
-                    name = tok
-                else:
-                    name += " " + tok
-            if model:
-                await self._create_tab(name, model)
-            else:
-                self._pending_new_tab_name = name
-                items = []
-                for i, (k, m) in enumerate(AI_MODELS.items(), 1):
-                    connected = shutil.which(m["cmd"][0]) is not None
-                    status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
-                    items.append(
-                        f"  [bold]{i}[/]) [bold]{m['name']}[/] ({k}) {status}"
-                    )
-                try:
-                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                    await msgs.mount(Static(
-                        f"[bold]{self._t('select_model')}:[/]\n\n"
-                        + "\n".join(items)
-                        + f"\n\n[dim]{self._t('type_number', n=len(AI_MODELS))}[/]",
-                        classes="info-block",
-                        id="model-selector",
-                    ))
-                    msgs.scroll_end(animate=False)
-                except NoMatches:
-                    pass
-                self._awaiting_model_selection = tab_id
-
-        elif cmd == "/close":
-            await self.action_close_tab()
-
-        elif cmd == "/clear":
-            self.action_clear_tab()
+            self._set_workdir(os.path.expanduser(arg) if arg else self.workdir)
 
         elif cmd == "/save":
-            self._persist_config()
+            self._persist()
             self.notify(self._t("save_done"), timeout=2)
 
-        elif cmd == "/help":
-            self._show_panel_sync("help")
+        # -- archivos -------------------------------------------------------
+        elif cmd == "/files":
+            self.action_toggle_files()
 
-        elif cmd == "/apps":
-            self._show_panel_sync("apps")
+        elif cmd == "/attach":
+            self._cmd_attach(arg, chat)
 
-        elif cmd == "/tools":
-            self._show_panel_sync("tools")
+        elif cmd == "/detach":
+            if chat:
+                chat.attachments.clear()
+                self._refresh_hint()
+            self.notify(self._t("attach_cleared"), timeout=2)
 
-        elif cmd == "/settings":
-            self._show_panel_sync("settings")
+        # -- paneles --------------------------------------------------------
+        elif cmd in ("/help", "/apps", "/tools", "/settings"):
+            await self._show_panel(cmd[1:])
 
-        elif cmd == "/about":
-            self.notify(self._t("about", version=VERSION), timeout=3)
+        # -- sistema --------------------------------------------------------
+        elif cmd == "/run":
+            await self._cmd_run(arg, tab_id)
 
-        elif cmd == "/models":
-            lines = [f"[bold]{self._t('models_available')}:[/]\n"]
-            for i, (k, m) in enumerate(AI_MODELS.items(), 1):
-                connected = shutil.which(m["cmd"][0]) is not None
-                status = f"[green]{self._t('connected')}[/]" if connected else f"[red]{self._t('disconnected')}[/]"
-                current = f" [bold cyan]{self._t('active_marker')}[/]" if k == self.current_model else ""
-                lines.append(
-                    f"  {i}) [bold]{m['name']}[/] ({k}) {status}{current}"
-                )
-            try:
-                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                await msgs.mount(Static("\n".join(lines), classes="info-block"))
-                msgs.scroll_end(animate=False)
-            except NoMatches:
-                pass
+        elif cmd == "/open":
+            if arg:
+                result = sysctl.open_app(arg)
+                if result:
+                    self.notify(self._t("opening", name=arg), timeout=1)
+                else:
+                    self._notify_sys_failure(result)
+            else:
+                self.notify(self._t("open_usage"), timeout=2)
 
-        elif cmd == "/themes":
-            lines = [f"[bold]{self._t('themes_available')}:[/]\n"]
-            for k, t in THEMES.items():
-                current = f" [bold cyan]{self._t('active_marker')}[/]" if k == self.theme_key else ""
-                lines.append(f"  [bold]{t['name']}[/] ({k}){current}")
-            try:
-                msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                await msgs.mount(Static("\n".join(lines), classes="info-block"))
-                msgs.scroll_end(animate=False)
-            except NoMatches:
-                pass
+        elif cmd == "/browse":
+            await self._cmd_browse(arg, tab_id)
 
+        elif cmd == "/browser":
+            self._cmd_browser(arg)
+
+        elif cmd == "/volume":
+            if arg.isdigit() and 0 <= int(arg) <= 100:
+                result = sysctl.set_volume(int(arg))
+                if result:
+                    self.notify(self._t("volume_set", val=arg), timeout=1)
+                else:
+                    self._notify_sys_failure(result)
+            else:
+                self.notify(self._t("volume_usage"), timeout=2)
+
+        elif cmd in ("/play", "/next", "/prev", "/track"):
+            self._cmd_spotify(cmd)
+
+        # -- meta -----------------------------------------------------------
         elif cmd == "/status":
+            usage = chat.session.usage if chat else None
             self.notify(
-                f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']} | "
-                f"{self._t('model_label')}: {AI_MODELS[self.current_model]['name']} | "
+                f"{self._t('model_label')}: {model_label(chat.model_key if chat else self.current_model)} | "
                 f"{self._t('effort_label')}: {self.effort} | "
-                f"{self._t('dir_label')}: {self.workdir}",
+                f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']} | "
+                f"{self._t('cost_label')}: ${usage.total_cost_usd:.4f}" if usage
+                else f"{self._t('effort_label')}: {self.effort}",
                 timeout=5,
             )
 
         elif cmd == "/reset":
-            self._context_tokens = 0
+            if chat:
+                chat.session.usage.__init__()  # type: ignore[misc]
             self._refresh_status()
             self.notify(self._t("context_reset"), timeout=1)
 
-        elif cmd == "/version":
-            self.notify(self._t("about", version=VERSION), timeout=2)
+        elif cmd in ("/version", "/about"):
+            self.notify(self._t("about", version=VERSION), timeout=3)
 
-        elif cmd == "/open":
-            if arg:
-                try:
-                    subprocess.Popen(["open", "-a", arg])
-                    self.notify(self._t("opening", name=arg), timeout=1)
-                except Exception as e:
-                    self.notify(f"Error: {e}", timeout=2)
-            else:
-                self.notify(self._t("open_usage"), timeout=2)
-
-        elif cmd == "/run":
-            if arg:
-                try:
-                    result = subprocess.run(
-                        arg,
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=10,
-                        cwd=self.workdir,
-                    )
-                    output = result.stdout or result.stderr or self._t("no_output")
-                    try:
-                        msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                        await msgs.mount(Static(
-                            f"[dim]$ {arg}[/]\n\n{output.strip()}",
-                            classes="info-block",
-                        ))
-                        msgs.scroll_end(animate=False)
-                    except NoMatches:
-                        pass
-                except subprocess.TimeoutExpired:
-                    self.notify(self._t("cmd_timeout"), timeout=2)
-                except Exception as e:
-                    self.notify(f"Error: {e}", timeout=2)
-            else:
-                self.notify(self._t("run_usage"), timeout=2)
-
-        elif cmd == "/volume":
-            if arg and arg.isdigit() and 0 <= int(arg) <= 100:
-                subprocess.run(
-                    ["osascript", "-e", f"set volume output volume {arg}"],
-                    capture_output=True,
-                )
-                self.notify(self._t("volume_set", val=arg), timeout=1)
-            else:
-                self.notify(self._t("volume_usage"), timeout=2)
-
-        elif cmd == "/play":
-            subprocess.run(
-                ["osascript", "-e", 'tell application "Spotify" to playpause'],
-                capture_output=True,
-            )
-            self.notify(self._t("play_pause"), timeout=1)
-
-        elif cmd == "/next":
-            subprocess.run(
-                ["osascript", "-e", 'tell application "Spotify" to next track'],
-                capture_output=True,
-            )
-            self.notify(self._t("next_track"), timeout=1)
-
-        elif cmd == "/prev":
-            subprocess.run(
-                ["osascript", "-e", 'tell application "Spotify" to previous track'],
-                capture_output=True,
-            )
-            self.notify(self._t("prev_track"), timeout=1)
-
-        elif cmd == "/copy":
-            chat = self._tabs.get(tab_id)
-            if chat and chat.last_response:
-                try:
-                    subprocess.run(
-                        ["pbcopy"],
-                        input=chat.last_response.encode(),
-                        check=True,
-                    )
-                    self.notify(self._t("copied"), timeout=1)
-                except Exception as e:
-                    self.notify(self._t("copy_error", err=e), timeout=2)
-            else:
-                self.notify(self._t("no_response_copy"), timeout=2)
-
-        elif cmd == "/history":
-            chat = self._tabs.get(tab_id)
-            count = chat.message_count if chat else 0
-            self.notify(self._t("messages_count", count=count), timeout=2)
-
-        elif cmd == "/export":
-            chat = self._tabs.get(tab_id)
-            if chat:
-                export_dir = Path.home() / ".config" / "term" / "exports"
-                export_dir.mkdir(parents=True, exist_ok=True)
-                ts = time.strftime("%Y%m%d_%H%M%S")
-                path = export_dir / f"chat_{ts}.txt"
-                try:
-                    msgs_area = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                    texts = []
-                    for child in msgs_area.children:
-                        if isinstance(child, UserMessage):
-                            texts.append(f"[{self._t('user_label')}] {child.renderable}")
-                        elif isinstance(child, AssistantMessage):
-                            texts.append(f"[{self._t('assistant_label')}] {child._text}")
-                        elif isinstance(child, Static):
-                            texts.append(str(child.renderable))
-                    path.write_text("\n\n".join(texts))
-                    self.notify(self._t("exported", path=path), timeout=3)
-                except Exception as e:
-                    self.notify(self._t("export_error", err=e), timeout=2)
-            else:
-                self.notify(self._t("no_active_chat"), timeout=2)
-
-        elif cmd == "/compact":
-            self.notify(self._t("compact_tip"), timeout=5)
-
-        elif cmd == "/restart":
+        elif cmd == "/quit":
             self.exit()
-            os.execv(sys.executable, [sys.executable, "-m", "term.app"])
-
-        elif cmd == "/browse":
-            url = arg.strip() if arg else ""
-            if self._default_browser:
-                # Use default browser directly
-                browser_app = self._default_browser
-                open_url = url or "https://www.google.com"
-                subprocess.Popen(["open", "-a", browser_app, open_url])
-                self.notify(self._t("opening", name=browser_app), timeout=1)
-            elif len(self._browsers) == 1:
-                # Only one browser, use it
-                open_url = url or "https://www.google.com"
-                subprocess.Popen(["open", "-a", self._browsers[0]["app"], open_url])
-                self.notify(self._t("opening", name=self._browsers[0]["name"]), timeout=1)
-            elif len(self._browsers) > 1:
-                # Show selector
-                self._pending_browse_url = url
-                items = []
-                for i, b in enumerate(self._browsers, 1):
-                    items.append(f"  [bold]{i}[/]) {b['name']}")
-                try:
-                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                    await msgs.mount(Static(
-                        f"[bold]{self._t('select_browser')}:[/]\n\n"
-                        + "\n".join(items)
-                        + f"\n\n[dim]{self._t('type_browser_number', n=len(self._browsers))}[/]"
-                        + f"\n[dim]{self._t('set_default_browser')}[/]",
-                        classes="info-block",
-                        id="browser-selector",
-                    ))
-                    msgs.scroll_end(animate=False)
-                except NoMatches:
-                    pass
-                self._awaiting_browser_selection = tab_id
-            else:
-                self.notify(self._t("no_browsers"), timeout=2)
-
-        elif cmd == "/browser":
-            if arg:
-                alias = arg.lower().strip()
-                if alias in BROWSER_ALIASES:
-                    app_name = BROWSER_ALIASES[alias]
-                    # Verify installed
-                    if Path(f"/Applications/{app_name}.app").exists():
-                        self._default_browser = app_name
-                        cfg = _load_config()
-                        cfg["default_browser"] = app_name
-                        _save_config(cfg)
-                        self.notify(self._t("default_browser_set", name=app_name), timeout=2)
-                    else:
-                        self.notify(self._t("not_installed", name=app_name), timeout=2)
-                else:
-                    aliases = ", ".join(BROWSER_ALIASES.keys())
-                    self.notify(self._t("valid_names", names=aliases), timeout=3)
-            else:
-                if self._default_browser:
-                    self.notify(self._t("current_browser", name=self._default_browser), timeout=2)
-                else:
-                    self.notify(self._t("no_default_browser"), timeout=2)
-
-        elif cmd == "/lang":
-            if arg:
-                code = arg.lower().strip()
-                if code in LANGUAGES:
-                    self._lang = code
-                    self._persist_config()
-                    self._refresh_status()
-                    self.notify(self._t("lang_set", lang=LANGUAGES[code]), timeout=2)
-                else:
-                    self.notify(self._t("lang_invalid", code=arg), timeout=3)
-            else:
-                lines = [f"[bold]{self._t('lang_available')}:[/]\n"]
-                for code, name in LANGUAGES.items():
-                    current = f" [bold cyan]{self._t('active_marker')}[/]" if code == self._lang else ""
-                    lines.append(f"  [bold]{code}[/] - {name}{current}")
-                lines.append(f"\n[dim]{self._t('lang_usage')}[/]")
-                try:
-                    msgs = self.query_one(f"#msgs-{tab_id}", VerticalScroll)
-                    await msgs.mount(Static("\n".join(lines), classes="info-block"))
-                    msgs.scroll_end(animate=False)
-                except NoMatches:
-                    pass
-
-        elif cmd == "/files":
-            try:
-                fp = self.query_one("#file-panel")
-                fp.toggle_class("visible")
-                if fp.has_class("visible"):
-                    self._refresh_file_panel()
-            except NoMatches:
-                pass
-
-        elif cmd == "/attach":
-            if arg:
-                file_path = os.path.expanduser(arg.strip())
-                if not os.path.isabs(file_path):
-                    file_path = os.path.join(self.workdir, file_path)
-                if os.path.isfile(file_path):
-                    try:
-                        content = Path(file_path).read_text(errors="replace")
-                        if len(content) > 10000:
-                            content = content[:10000] + "\n... (truncated)"
-                        self._attached_content = f"[File: {file_path}]\n```\n{content}\n```\n\n"
-                        self.notify(f"Attached: {os.path.basename(file_path)}", timeout=2)
-                    except Exception as e:
-                        self.notify(f"Error reading file: {e}", timeout=2)
-                else:
-                    self.notify(f"File not found: {file_path}", timeout=2)
-            else:
-                self.notify("Usage: /attach <path>", timeout=2)
 
         else:
             self.notify(self._t("unknown_cmd", cmd=cmd), timeout=2)
 
-    # ------------------------------------------------------------ tab management
+    # ------------------------------------------------------- comandos concretos
 
-    async def _create_tab(
-        self, name: str | None = None, model_key: str | None = None,
-    ) -> None:
-        tab_id = self._next_tab_id()
-        mk = model_key or self.current_model
-        chat = ChatTab(mk, tab_id, self.theme_key, self.workdir)
-        self._tabs[tab_id] = chat
-
-        tab_name = name or f"Chat {len(self._tabs)}"
-        tc = self.query_one("#main-tabs", TabbedContent)
-        pane = TabPane(tab_name, id=f"pane-{tab_id}")
-        await tc.add_pane(pane)
-        await pane.mount(chat)
-        tc.active = f"pane-{tab_id}"
-        self._update_tab_labels()
-
-        await asyncio.sleep(0.1)
-        try:
-            self.query_one(f"#input-{tab_id}", Input).focus()
-        except NoMatches:
-            pass
-
-    async def action_new_tab(self) -> None:
-        await self._create_tab()
-
-    async def action_close_tab(self) -> None:
-        if len(self._tabs) <= 1:
-            self.notify(self._t("cannot_close_last"), timeout=1)
+    async def _cmd_new(self, arg: str, tab_id: str) -> None:
+        name: str | None = None
+        model: str | None = None
+        for token in arg.split():
+            if token in AI_MODELS:
+                model = token
+            elif name is None:
+                name = token
+            else:
+                name += " " + token
+        if model:
+            await self._create_tab(name, model)
             return
-        tc = self.query_one("#main-tabs", TabbedContent)
-        active = tc.active
-        if active and active.startswith("pane-chat"):
-            tab_id = active.replace("pane-", "")
-            chat = self._tabs.pop(tab_id, None)
-            if chat and chat.proc:
-                try:
-                    chat.proc.kill()
-                except ProcessLookupError:
-                    pass
-            await tc.remove_pane(active)
-            # Rename last tab to "Chat" when only one remains
-            if len(self._tabs) == 1:
-                remaining_id = next(iter(self._tabs))
-                try:
-                    tab = tc.get_tab(f"pane-{remaining_id}")
-                    tab.label = "Chat"
-                except Exception:
-                    pass
-            self._update_tab_labels()
 
-    def action_clear_tab(self) -> None:
+        self._pending_tab_name = name
+        lines = [
+            f"  [bold]{i}[/]) [bold]{entry['name']}[/] ({key})"
+            for i, (key, entry) in enumerate(AI_MODELS.items(), 1)
+        ]
+        await self._post_info(
+            tab_id,
+            f"[bold]{self._t('select_model')}:[/]\n\n" + "\n".join(lines)
+            + f"\n\n[dim]{self._t('type_number', n=len(AI_MODELS))}[/]",
+            widget_id="dialog",
+        )
+        self._awaiting = "model"
+        self._awaiting_tab = tab_id
+
+    async def _cmd_sessions(self, tab_id: str) -> None:
+        records = self._store.records
+        if not records:
+            await self._post_info(tab_id, self._t("no_sessions"))
+            return
+        lines = [f"[bold]{self._t('sessions_title')}:[/]\n"]
+        for i, record in enumerate(records[:20], 1):
+            title = record.title or record.session_id[:8]
+            lines.append(
+                f"  [bold]{i}[/]) {title}  "
+                f"[dim]{model_label(record.model)} · {record.messages} msg · "
+                f"{record.age_label}[/]"
+            )
+        lines.append(f"\n[dim]{self._t('resume_usage')}[/]")
+        await self._post_info(tab_id, "\n".join(lines))
+
+    async def _cmd_resume(self, arg: str, tab_id: str) -> None:
+        if not arg.isdigit():
+            self.notify(self._t("resume_usage"), timeout=3)
+            return
+        record = self._store.get(int(arg))
+        if record is None:
+            self.notify(self._t("session_not_found", n=arg), timeout=2)
+            return
+        await self._create_tab(record.title or None, record.model)
+        chat = self._active_chat()
+        if chat is None:
+            return
+        chat.session.adopt(record.session_id)
+        chat.message_count = record.messages
+        if record.workdir and os.path.isdir(record.workdir):
+            chat.workdir = record.workdir
+        self._clear_empty_state(chat.tab_id)
+        await self._post_info(
+            chat.tab_id,
+            f"[bold]{self._t('session_resumed', n=record.messages)}[/]\n"
+            f"[dim]{record.session_id}[/]",
+        )
+        self.notify(self._t("session_resumed", n=record.messages), timeout=2)
+
+    async def _cmd_search(self, arg: str, tab_id: str) -> None:
+        if not arg:
+            self.notify(self._t("search_usage"), timeout=2)
+            return
+        area = await self._msgs(tab_id)
+        if area is None:
+            return
+        needle = arg.lower()
+        hits: list[str] = []
+        for child in area.children:
+            if isinstance(child, UserMessage):
+                body, who = child.raw_text, self._t("user_label")
+            elif isinstance(child, AssistantMessage):
+                body, who = child.text, self._t("assistant_label")
+            else:
+                continue
+            for line in body.splitlines():
+                if needle in line.lower():
+                    flat = line.strip()[:100]
+                    hits.append(f"  [bold]{who}[/] {flat}")
+        if not hits:
+            self.notify(self._t("search_none", query=arg), timeout=3)
+            return
+        header = self._t("search_results", count=len(hits), query=arg)
+        await self._post(
+            tab_id,
+            Static(f"[bold]{header}[/]\n\n" + "\n".join(hits[:25]), classes="search-hit"),
+        )
+
+    async def _cmd_export(self, tab_id: str) -> None:
+        area = await self._msgs(tab_id)
+        if area is None:
+            self.notify(self._t("no_active_chat"), timeout=2)
+            return
+        blocks: list[str] = []
+        for child in area.children:
+            if isinstance(child, UserMessage):
+                blocks.append(f"## {self._t('user_label')}\n\n{child.raw_text}")
+            elif isinstance(child, AssistantMessage):
+                blocks.append(f"## {self._t('assistant_label')}\n\n{child.text}")
         try:
-            tc = self.query_one("#main-tabs", TabbedContent)
-            active = tc.active
-            if active and active.startswith("pane-chat"):
-                tab_id = active.replace("pane-", "")
-                self.query_one(f"#msgs-{tab_id}", VerticalScroll).remove_children()
-        except NoMatches:
-            pass
+            cfg_mod.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+            path = cfg_mod.EXPORT_DIR / f"chat_{time.strftime('%Y%m%d_%H%M%S')}.md"
+            path.write_text("\n\n".join(blocks), encoding="utf-8")
+        except OSError as exc:
+            self.notify(self._t("export_error", err=exc), timeout=3)
+            return
+        self.notify(self._t("exported", path=path), timeout=4)
 
-    async def action_cancel(self) -> None:
-        try:
-            tc = self.query_one("#main-tabs", TabbedContent)
-            active = tc.active
-            if active and active.startswith("pane-chat"):
-                tab_id = active.replace("pane-", "")
-                chat = self._tabs.get(tab_id)
-                if chat and chat.proc:
-                    try:
-                        chat.proc.kill()
-                    except ProcessLookupError:
-                        pass
-                    chat.proc = None
-                    chat.is_loading = False
-                    try:
-                        self.query_one(f"#load-{tab_id}", Label).remove_class("visible")
-                    except NoMatches:
-                        pass
-        except NoMatches:
-            pass
+    def _cmd_code(self, arg: str, chat: ChatTab | None) -> None:
+        """Copiar un bloque de codigo suelto de la ultima respuesta."""
+        if chat is None or not chat.last_response:
+            self.notify(self._t("no_response_copy"), timeout=2)
+            return
+        blocks = re.findall(r"```[^\n]*\n(.*?)```", chat.last_response, re.DOTALL)
+        if not blocks:
+            self.notify(self._t("no_code_blocks"), timeout=3)
+            return
+        index = int(arg) if arg.isdigit() and 1 <= int(arg) <= len(blocks) else 1
+        result = sysctl.copy_to_clipboard(blocks[index - 1].strip())
+        if result:
+            self.notify(self._t("code_copied", n=index), timeout=2)
+        else:
+            self.notify(self._t("copy_error", err=result.reason), timeout=3)
 
-    def action_cycle_effort(self) -> None:
-        idx = EFFORT_LEVELS.index(self.effort) if self.effort in EFFORT_LEVELS else 2
-        self.effort = EFFORT_LEVELS[(idx + 1) % len(EFFORT_LEVELS)]
+    def _cmd_model(self, arg: str, chat: ChatTab | None) -> None:
+        if not arg:
+            self.notify(f"{self._t('models_list')}: {', '.join(AI_MODELS)}", timeout=3)
+            return
+        key, _ = resolve_model(arg)
+        self.current_model = key
+        if chat:
+            chat.model_key = key
         self._refresh_status()
-        self.notify(f"{self._t('effort_set')}: {self.effort}", timeout=1)
+        known = key in AI_MODELS
+        self.notify(
+            f"{self._t('model_set')}: {model_label(key)}" if known
+            else self._t("model_set_custom", name=key),
+            timeout=2,
+        )
 
-    # ------------------------------------------------------------ AI execution
-
-    @work(exclusive=False, thread=False)
-    async def _run_ai(self, chat: ChatTab, prompt: str) -> None:
-        model = AI_MODELS.get(chat.model_key, AI_MODELS["claude"])
-        full_output = ""
-        system_context = _build_system_context(self._lang)
-
-        try:
-            cmd_line = (
-                model["cmd"]
-                + [prompt]
-                + model["args"]
-                + ["--effort", self.effort]
-                + ["--append-system-prompt", system_context]
-            )
-
-            chat.proc = await asyncio.create_subprocess_exec(
-                *cmd_line,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=chat.workdir or self.workdir,
-            )
-            assert chat.proc.stdout is not None
-
-            while True:
-                chunk = await chat.proc.stdout.read(512)
-                if not chunk:
-                    break
-                decoded = chunk.decode("utf-8", errors="replace")
-                full_output += decoded
-                self._context_tokens += len(decoded.split()) * 2
-                if chat.assistant_widget is not None:
-                    await chat.assistant_widget.stream(full_output)
-                try:
-                    self.query_one(
-                        f"#msgs-{chat.tab_id}", VerticalScroll,
-                    ).scroll_end(animate=False)
-                except NoMatches:
-                    pass
+    async def _cmd_lang(self, arg: str, tab_id: str) -> None:
+        if arg:
+            code = arg.lower()
+            if code in LANGUAGES:
+                self._lang = code
+                self._persist()
                 self._refresh_status()
+                self._refresh_hint()
+                self.notify(self._t("lang_set", lang=LANGUAGES[code]), timeout=2)
+            else:
+                self.notify(self._t("lang_invalid", code=arg), timeout=3)
+            return
+        lines = [f"[bold]{self._t('lang_available')}:[/]\n"]
+        for code, name in LANGUAGES.items():
+            mark = f" [bold]{self._t('active_marker')}[/]" if code == self._lang else ""
+            lines.append(f"  [bold]{code}[/] - {name}{mark}")
+        lines.append(f"\n[dim]{self._t('lang_usage')}[/]")
+        await self._post_info(tab_id, "\n".join(lines))
 
-            await chat.proc.wait()
-
-        except FileNotFoundError:
-            full_output = (
-                "Error: `claude` no encontrado.\n\n"
-                "Instalar: `npm install -g @anthropic-ai/claude-code`\n"
-                "Autenticar: `claude auth login`"
+    def _cmd_permissions(self, arg: str) -> None:
+        if arg in PERMISSION_MODES:
+            self._permission_mode = arg
+            self._persist()
+            self.notify(self._t("permission_mode_set", mode=arg), timeout=2)
+        else:
+            self.notify(
+                self._t("permission_modes", modes=", ".join(PERMISSION_MODES)),
+                timeout=4,
             )
-            if chat.assistant_widget is not None:
-                await chat.assistant_widget.stream(full_output)
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            if chat.assistant_widget is not None:
-                await chat.assistant_widget.stream(
-                    full_output + f"\n\nError: {exc}"
-                )
-        finally:
-            chat.last_response = full_output
-            chat.proc = None
-            chat.is_loading = False
-            chat.assistant_widget = None
-            try:
-                self.query_one(
-                    f"#load-{chat.tab_id}", Label,
-                ).remove_class("visible")
-            except NoMatches:
-                pass
+
+    def _cmd_attach(self, arg: str, chat: ChatTab | None) -> None:
+        if not arg or chat is None:
+            self.notify(self._t("attach_usage"), timeout=2)
+            return
+        path = Path(os.path.expanduser(arg))
+        if not path.is_absolute():
+            path = Path(self.workdir) / path
+        if not path.is_file():
+            self.notify(self._t("attach_not_found", path=path), timeout=3)
+            return
+        try:
+            content = path.read_text(errors="replace")
+        except OSError as exc:
+            self.notify(self._t("attach_error", err=exc), timeout=3)
+            return
+        if len(content) > _ATTACH_LIMIT:
+            content = content[:_ATTACH_LIMIT] + "\n... (truncado)"
+        chat.attachments.append((str(path), content))
+        self._refresh_hint()
+        self.notify(
+            self._t("attach_ok", name=path.name, size=_fmt_size(path)), timeout=2
+        )
+
+    async def _cmd_run(self, arg: str, tab_id: str) -> None:
+        if not arg:
+            self.notify(self._t("run_usage"), timeout=2)
+            return
+        if not self._permissions_granted:
+            self.notify(self._t("perms_denied"), timeout=3)
+            return
+        result = sysctl.run_shell(arg, self.workdir)
+        if not result:
+            self.notify(
+                self._t("cmd_timeout") if result.reason == "timeout" else result.reason,
+                timeout=3,
+            )
+            return
+        await self._post_info(
+            tab_id, f"[dim]$ {arg}[/]\n\n{result.output or self._t('no_output')}"
+        )
+
+    async def _cmd_browse(self, arg: str, tab_id: str) -> None:
+        url = arg or "https://www.google.com"
+        if self._default_browser:
+            self._open_url(url, self._default_browser)
+            return
+        if len(self._browsers) == 1:
+            self._open_url(url, self._browsers[0]["app"])
+            return
+        if not self._browsers:
+            self.notify(self._t("no_browsers"), timeout=2)
+            return
+        self._pending_url = url
+        lines = [f"  [bold]{i}[/]) {b['name']}"
+                 for i, b in enumerate(self._browsers, 1)]
+        await self._post_info(
+            tab_id,
+            f"[bold]{self._t('select_browser')}:[/]\n\n" + "\n".join(lines)
+            + f"\n\n[dim]{self._t('type_browser_number', n=len(self._browsers))}[/]"
+            + f"\n[dim]{self._t('set_default_browser')}[/]",
+            widget_id="dialog",
+        )
+        self._awaiting = "browser"
+        self._awaiting_tab = tab_id
+
+    def _cmd_browser(self, arg: str) -> None:
+        if not arg:
+            self.notify(
+                self._t("current_browser", name=self._default_browser)
+                if self._default_browser else self._t("no_default_browser"),
+                timeout=3,
+            )
+            return
+        app_name = sysctl.BROWSER_ALIASES.get(arg.lower())
+        if not app_name:
+            self.notify(
+                self._t("valid_names", names=", ".join(sysctl.BROWSER_ALIASES)),
+                timeout=4,
+            )
+            return
+        if not any(b["app"] == app_name for b in self._browsers):
+            self.notify(self._t("not_installed", name=app_name), timeout=3)
+            return
+        self._default_browser = app_name
+        self._persist()
+        self.notify(self._t("default_browser_set", name=app_name), timeout=2)
+
+    def _cmd_spotify(self, cmd: str) -> None:
+        actions = {
+            "/play": ("playpause", "play_pause"),
+            "/next": ("next", "next_track"),
+            "/prev": ("previous", "prev_track"),
+            "/track": ("track", ""),
+        }
+        action, key = actions[cmd]
+        result = sysctl.spotify(action)
+        if not result:
+            self._notify_sys_failure(result)
+            return
+        self.notify(result.output or self._t(key), timeout=2)
+
+    # ------------------------------------------------------------ paneles
+
+    async def _show_panel(self, panel: str) -> None:
+        """Abrir un panel como pestana. Se cierra con Esc o ctrl+w."""
+        tc = self.query_one("#main-tabs", TabbedContent)
+        pane_id = f"pane-{panel}"
+        with contextlib.suppress(Exception):
+            await tc.remove_pane(pane_id)
+
+        pane = TabPane(panel.capitalize(), id=pane_id)
+        await tc.add_pane(pane)
+        tc.active = pane_id
+
+        builders = {
+            "settings": self._panel_settings,
+            "apps": self._panel_apps,
+            "tools": self._panel_tools,
+            "help": self._panel_help,
+        }
+        body = builders[panel]()
+        await pane.mount(Static(body, classes="panel"))
+        await pane.mount(Static(f"[dim]{self._t('panel_close_hint')}[/]",
+                                classes="panel-hint"))
+
+    def _panel_settings(self) -> str:
+        chat = self._active_chat()
+        model_key = chat.model_key if chat else self.current_model
+        return (
+            f"[bold]{self._t('settings_title')}[/]\n\n"
+            f"{self._t('theme_set')}: [bold]{THEMES[self.theme_key]['name']}[/]\n"
+            f"  {self._t('available')}: {', '.join(theme_names())}\n"
+            f"  {self._t('change_cmd')}: [bold]/theme <nombre>[/]\n\n"
+            f"{self._t('model_label')}: [bold]{model_label(model_key)}[/]\n"
+            f"  {self._t('available')}: {', '.join(AI_MODELS)}\n"
+            f"  {self._t('change_cmd')}: [bold]/model <nombre>[/]\n\n"
+            f"{self._t('effort_label')}: [bold]{self.effort}[/]\n"
+            f"  {self._t('levels')}: {', '.join(EFFORT_LEVELS)}\n"
+            f"  {self._t('change_cmd')}: [bold]/effort <nivel>[/]\n\n"
+            f"{self._t('permission_mode_set', mode=self._permission_mode)}\n"
+            f"  {self._t('permission_modes', modes=', '.join(PERMISSION_MODES))}\n"
+            f"  {self._t('change_cmd')}: [bold]/permissions <modo>[/]\n\n"
+            f"{self._t('lang_current', lang=LANGUAGES.get(self._lang, self._lang))}\n"
+            f"  {self._t('change_cmd')}: [bold]/lang <código>[/]\n\n"
+            f"{self._t('dir_label')}: [bold]{self.workdir}[/]\n"
+            f"  {self._t('change_cmd')}: [bold]/workdir <ruta>[/]\n\n"
+            f"[dim]{self._t('config_path', path=cfg_mod.CONFIG_PATH)}[/]"
+        )
+
+    def _panel_apps(self) -> str:
+        by_category: dict[str, list[dict[str, str]]] = {}
+        for app in self._apps:
+            by_category.setdefault(app["category"], []).append(app)
+        lines = [f"[bold]{self._t('cli_apps_title')}[/]\n"]
+        for category, items in by_category.items():
+            lines.append(f"\n[bold]{category}[/]")
+            lines += [f"  {it['name']} [dim]({it['cmd']})[/]" for it in items]
+        if self._browsers:
+            lines.append(f"\n[bold]{self._t('select_browser')}[/]")
+            lines += [f"  {b['name']}" for b in self._browsers]
+        lines.append(f"\n[dim]{self._t('apps_hint')}[/]")
+        return "\n".join(lines)
+
+    def _panel_tools(self) -> str:
+        import shutil as _shutil
+
+        checks = [
+            ("Claude CLI", "claude"),
+            ("Git", "git"),
+            ("Node.js", "node"),
+            ("Python", "python3"),
+            ("Docker", "docker"),
+            ("ripgrep", "rg"),
+        ]
+        if sysctl.IS_MACOS:
+            checks.append(("osascript", "osascript"))
+        lines = [f"[bold]{self._t('tools_title')}[/]\n"]
+        for name, cmd in checks:
+            ok = _shutil.which(cmd) is not None
+            mark = "[bold green]OK[/]" if ok else "[bold red]--[/]"
+            lines.append(f"  {mark}  [bold]{name}[/]")
+        if not sysctl.IS_MACOS:
+            lines.append(
+                f"\n[dim]{self._t('platform_unsupported', feature='Spotify / osascript')}[/]"
+            )
+        return "\n".join(lines)
+
+    def _panel_help(self) -> str:
+        lines = [
+            build_logo(self.theme_key),
+            "",
+            f"[bold]Term v{VERSION}[/] -- {self._t('term_subtitle')}",
+            "",
+            f"[bold]{self._t('what_is')}[/]",
+            f"  {self._t('what_is_desc')}",
+            "",
+            f"[bold]{self._t('commands_title')}:[/]",
+        ]
+        lines += [f"  [bold]{c:26s}[/] {d}" for c, d in COMMANDS_HELP.items()]
+        lines += ["", f"[bold]{self._t('shortcuts_title')}:[/]"]
+        lines += [f"  [bold]{k:26s}[/] {d}" for k, d in SHORTCUTS_HELP.items()]
+        lines += [
+            "",
+            f"[bold]{self._t('system_examples')}:[/]",
+            "  'abre Safari'",
+            "  'siguiente canción en Spotify'",
+            "  'pon el volumen a 50'",
+            "",
+            f"[dim]{self._t('config_path', path=cfg_mod.CONFIG_PATH)}[/]",
+        ]
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Punto de entrada
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="term", description="Term -- TUI con IA",
-    )
+    parser = argparse.ArgumentParser(prog="term", description="Term -- TUI con IA")
     parser.add_argument("--workdir", "-w", default="", help="Directorio de trabajo")
     parser.add_argument(
-        "--theme", "-t", default="", choices=list(THEMES.keys()), help="Tema",
+        "--theme", "-t", default="", choices=theme_names(), help="Tema de color"
+    )
+    parser.add_argument(
+        "--lang", "-l", default="", choices=list(LANGUAGES), help="Idioma"
+    )
+    parser.add_argument(
+        "--version", "-v", action="version", version=f"Term {VERSION}"
     )
     args = parser.parse_args()
-    TermApp(workdir=args.workdir, theme=args.theme).run()
+
+    workdir = os.path.expanduser(args.workdir) if args.workdir else ""
+    if workdir and not os.path.isdir(workdir):
+        print(f"term: el directorio no existe: {workdir}", file=sys.stderr)
+        raise SystemExit(2)
+
+    TermApp(workdir=workdir, theme=args.theme, lang=args.lang).run()
 
 
 if __name__ == "__main__":

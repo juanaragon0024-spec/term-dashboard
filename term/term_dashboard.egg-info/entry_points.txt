@@ -1,2 +1,0 @@
-[console_scripts]
-term = term.app:main
