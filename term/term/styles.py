@@ -209,6 +209,11 @@ Underline {
     margin: 0;
     padding: 1;
 }
+/* Los dialogos son listas: centrarlas las hace ilegibles. */
+#dialog {
+    text-align: left;
+    padding: 1 3;
+}
 
 /* -- Panels -- */
 .panel {

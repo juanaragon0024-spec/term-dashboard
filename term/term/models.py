@@ -1,60 +1,90 @@
-"""Modelos y niveles de esfuerzo que Term ofrece a la CLI de Claude Code."""
+"""Catalogo de modelos, niveles de esfuerzo y modos de permisos.
+
+El catalogo se arma a partir de los proveedores instalados, asi que la lista
+que ve el usuario cambia sola segun lo que tenga en la maquina.
+"""
 
 from __future__ import annotations
 
+from .providers import (
+    DEFAULT_PROVIDER,
+    PROVIDERS,
+    available_providers,
+    get_provider,
+    join_ref,
+    split_ref,
+)
+
 __all__ = [
-    "AI_MODELS",
-    "DEFAULT_MODEL",
+    "DEFAULT_MODEL_REF",
     "EFFORT_LEVELS",
     "PERMISSION_MODES",
+    "catalog",
     "model_label",
-    "resolve_model",
+    "normalise_ref",
+    "provider_label",
 ]
-
-# `alias` es lo que se le pasa a `claude --model`. None significa no pasar el
-# flag y dejar que la CLI use el modelo configurado por el usuario.
-AI_MODELS: dict[str, dict[str, str | None]] = {
-    "default": {"name": "Claude", "alias": None},
-    "opus": {"name": "Claude Opus", "alias": "opus"},
-    "sonnet": {"name": "Claude Sonnet", "alias": "sonnet"},
-    "haiku": {"name": "Claude Haiku", "alias": "haiku"},
-}
-
-DEFAULT_MODEL = "default"
 
 EFFORT_LEVELS = ["low", "medium", "high", "max"]
 
 # Los modos que acepta `claude --permission-mode`.
 PERMISSION_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"]
 
-# Claves que existian en versiones anteriores de Term y que seguimos aceptando
-# para que una config vieja no arranque con un modelo invalido.
+DEFAULT_MODEL_REF = f"{DEFAULT_PROVIDER}/default"
+
+# Referencias que usaban las versiones anteriores, cuando Term solo hablaba con
+# Claude. Se siguen aceptando para que una configuracion vieja no arranque con
+# un modelo invalido.
 _LEGACY = {
-    "claude": "default",
-    "claude-opus": "opus",
-    "claude-haiku": "haiku",
-    "claude-sonnet": "sonnet",
+    "claude": "claude/default",
+    "default": "claude/default",
+    "claude-opus": "claude/opus",
+    "claude-sonnet": "claude/sonnet",
+    "claude-haiku": "claude/haiku",
+    "opus": "claude/opus",
+    "sonnet": "claude/sonnet",
+    "haiku": "claude/haiku",
 }
 
 
-def resolve_model(key: str) -> tuple[str, str | None]:
-    """Normalizar una clave de modelo a `(clave, alias para --model)`.
+def normalise_ref(ref: str) -> str:
+    """Dejar una referencia en la forma `proveedor/modelo`."""
+    ref = (ref or "").strip()
+    if not ref:
+        return DEFAULT_MODEL_REF
+    if ref in _LEGACY:
+        return _LEGACY[ref]
+    provider_key, model = split_ref(ref)
+    return join_ref(provider_key, model)
 
-    Una clave desconocida se trata como un identificador de modelo literal
-    (por ejemplo `claude-opus-4-5-20251101`), asi que `/model <id>` funciona
-    con cualquier modelo que la CLI acepte sin tener que tocar esta tabla.
+
+def catalog(only_installed: bool = True) -> list[tuple[str, str, str]]:
+    """Modelos sugeridos como `(referencia, etiqueta, proveedor)`.
+
+    Solo se ofrecen por defecto los proveedores instalados: proponer un modelo
+    que no se puede ejecutar solo produce un error mas tarde.
     """
-    key = (key or "").strip()
-    key = _LEGACY.get(key, key)
-    if not key:
-        return DEFAULT_MODEL, None
-    if key in AI_MODELS:
-        return key, AI_MODELS[key]["alias"]  # type: ignore[return-value]
-    return key, key
+    proveedores = available_providers() if only_installed else list(PROVIDERS.values())
+    entradas: list[tuple[str, str, str]] = []
+    for provider in proveedores:
+        for model in provider.suggested_models:
+            entradas.append((join_ref(provider.key, model), model, provider.name))
+    return entradas
 
 
-def model_label(key: str) -> str:
-    """Nombre legible de un modelo, incluidos los identificadores literales."""
-    key = _LEGACY.get(key, key)
-    entry = AI_MODELS.get(key)
-    return str(entry["name"]) if entry else key
+def provider_label(ref: str) -> str:
+    """Nombre legible del proveedor de una referencia."""
+    provider_key, _ = split_ref(normalise_ref(ref))
+    return get_provider(provider_key).name
+
+
+def model_label(ref: str) -> str:
+    """Etiqueta corta para la barra de estado: `proveedor · modelo`."""
+    provider_key, model = split_ref(normalise_ref(ref))
+    provider = get_provider(provider_key)
+    if provider_key == DEFAULT_PROVIDER and model == "default":
+        return "Claude"
+    # El modelo de opencode ya lleva su casa delante; se recorta para que
+    # quepa en la barra.
+    short = model.rsplit("/", 1)[-1]
+    return f"{provider.name} · {short}"

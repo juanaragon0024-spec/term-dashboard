@@ -6,7 +6,8 @@ import json
 
 import pytest
 
-from term.session import ClaudeSession, StreamEvent, Usage
+from term.session import ChatSession as ClaudeSession
+from term.session import StreamEvent, Usage
 
 # Lineas reales capturadas de `claude -p --output-format stream-json --verbose`,
 # recortadas a los campos que Term lee.
@@ -45,7 +46,7 @@ RESULT_LINE = json.dumps({
 
 
 def parse(session: ClaudeSession, line: str) -> list[StreamEvent]:
-    return session._parse(json.loads(line))
+    return [session._adopt(p) for p in session.provider.parse_line(line)]
 
 
 class TestBuildCommand:
@@ -71,15 +72,20 @@ class TestBuildCommand:
         assert "--verbose" in cmd
 
     def test_modelo_predeterminado_no_pasa_el_flag(self):
-        cmd = ClaudeSession().build_command("hola", model="default")
-        assert "--model" not in cmd
+        s = ClaudeSession()
+        s.set_model_ref("claude/default")
+        assert "--model" not in s.build_command("hola")
 
     def test_alias_de_modelo(self):
-        cmd = ClaudeSession().build_command("hola", model="opus")
+        s = ClaudeSession()
+        s.set_model_ref("claude/opus")
+        cmd = s.build_command("hola")
         assert cmd[cmd.index("--model") + 1] == "opus"
 
     def test_identificador_de_modelo_literal(self):
-        cmd = ClaudeSession().build_command("hola", model="claude-opus-4-5-20251101")
+        s = ClaudeSession()
+        s.set_model_ref("claude/claude-opus-4-5-20251101")
+        cmd = s.build_command("hola")
         assert cmd[cmd.index("--model") + 1] == "claude-opus-4-5-20251101"
 
     def test_restricted_cuando_se_deniegan_permisos(self):
@@ -138,19 +144,19 @@ class TestParse:
         payload = json.loads(RESULT_LINE)
         payload["is_error"] = True
         payload["subtype"] = "error_max_turns"
-        events = ClaudeSession()._parse(payload)
+        events = parse(ClaudeSession(), json.dumps(payload))
         assert [e.kind for e in events] == ["result", "error"]
         assert events[1].text == "error_max_turns"
 
     def test_lineas_desconocidas_se_ignoran(self):
         s = ClaudeSession()
-        assert s._parse({"type": "rate_limit_event"}) == []
-        assert s._parse({"type": "system", "subtype": "hook_started"}) == []
-        assert s._parse({}) == []
+        assert parse(s, '{"type": "rate_limit_event"}') == []
+        assert parse(s, '{"type": "system", "subtype": "hook_started"}') == []
+        assert parse(s, "{}") == []
 
     def test_bloque_sin_forma_esperada_no_revienta(self):
-        payload = {"type": "assistant", "message": {"content": ["texto suelto", None]}}
-        assert ClaudeSession()._parse(payload) == []
+        payload = '{"type": "assistant", "message": {"content": ["x", null]}}'
+        assert parse(ClaudeSession(), payload) == []
 
 
 class TestReset:
@@ -168,3 +174,85 @@ class TestReset:
         s.adopt("sesion-guardada")
         assert s.started is True
         assert "--resume" in s.build_command("sigue")
+
+
+class TestPestanasIndependientes:
+    """Cada pestaña es una conversación aparte, con su IA y su hilo."""
+
+    def test_dos_sesiones_no_comparten_hilo(self):
+        a, b = ClaudeSession(), ClaudeSession()
+        assert a.session_id != b.session_id
+
+    def test_cada_una_puede_usar_un_proveedor_distinto(self):
+        a, b = ClaudeSession(), ClaudeSession()
+        a.set_model_ref("claude/opus")
+        b.set_model_ref("opencode/gpt-5.2")
+
+        assert a.provider_key == "claude"
+        assert b.provider_key == "opencode"
+        assert a.build_command("hola")[0] == "claude"
+        assert b.build_command("hola")[0] == "opencode"
+
+    def test_cambiar_el_modelo_de_una_no_toca_a_la_otra(self):
+        a, b = ClaudeSession(), ClaudeSession()
+        a.set_model_ref("claude/opus")
+        b.set_model_ref("claude/haiku")
+        a.set_model_ref("opencode/grok-4")
+
+        assert b.model_ref == "claude/haiku"
+        assert b.provider_key == "claude"
+
+    def test_cambiar_de_proveedor_abre_un_hilo_nuevo(self):
+        """El id de sesión de una CLI no significa nada para otra: seguir
+        usándolo pediría retomar una conversación que no existe."""
+        s = ClaudeSession()
+        s.adopt("sesion-de-claude")
+        assert s.started is True
+
+        s.set_model_ref("opencode/gpt-5.2")
+        assert s.session_id != "sesion-de-claude"
+        assert s.started is False
+
+    def test_cambiar_de_modelo_dentro_del_mismo_proveedor_conserva_el_hilo(self):
+        """Pasar de opus a haiku es la misma conversación; no hay que perderla."""
+        s = ClaudeSession()
+        s.set_model_ref("claude/opus")
+        s.adopt("mismo-hilo")
+        s.set_model_ref("claude/haiku")
+
+        assert s.session_id == "mismo-hilo"
+        assert s.started is True
+        assert s.model == "haiku"
+
+    def test_un_proveedor_sin_sesiones_no_intenta_retomar(self):
+        """Ollama no guarda conversaciones: pedirle --resume sería un error."""
+        s = ClaudeSession()
+        s.set_model_ref("ollama/llama3.3")
+        s.started = True
+        cmd = s.build_command("hola")
+        assert "--resume" not in cmd
+        assert "--session" not in cmd
+
+    def test_el_consumo_se_cuenta_por_separado(self):
+        a, b = ClaudeSession(), ClaudeSession()
+        a.usage = Usage(output_tokens=100, total_cost_usd=0.5)
+        assert b.usage.output_tokens == 0
+        assert b.usage.total_cost_usd == 0.0
+
+
+class TestTextoAcumulado:
+    def test_claude_manda_trozos_y_opencode_el_texto_entero(self):
+        """Unos proveedores mandan el delta y otros el acumulado; sin
+        distinguirlos, la respuesta saldría duplicada."""
+        claude = ClaudeSession()
+        eventos = parse(claude, DELTA_LINE)
+        assert eventos[0].replaces_text is False
+
+        oc = ClaudeSession()
+        oc.set_model_ref("opencode/gpt-5.2")
+        linea = json.dumps({
+            "type": "message.part.updated",
+            "properties": {"part": {"type": "text", "text": "Hola"}},
+        })
+        eventos = parse(oc, linea)
+        assert eventos[0].replaces_text is True

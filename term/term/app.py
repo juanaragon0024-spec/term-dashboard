@@ -40,13 +40,15 @@ from .commands import (
 )
 from .i18n import LANGUAGES, translate
 from .models import (
-    AI_MODELS,
+    DEFAULT_MODEL_REF,
     EFFORT_LEVELS,
     PERMISSION_MODES,
+    catalog,
     model_label,
-    resolve_model,
+    normalise_ref,
 )
-from .session import ClaudeSession, claude_available
+from .providers import get_provider, split_ref
+from .session import ChatSession, claude_available
 from .store import SessionStore
 from .styles import APP_CSS
 from .themes import DEFAULT_THEME, THEMES, build_logo, theme_names
@@ -125,8 +127,19 @@ class AssistantMessage(Vertical):
         yield self._md
 
     async def append(self, chunk: str) -> None:
-        """Anadir texto y repintar solo si toca."""
-        self.text += chunk
+        """Anadir un trozo de texto y repintar solo si toca."""
+        await self._set(self.text + chunk)
+
+    async def replace(self, text: str) -> None:
+        """Sustituir el texto entero.
+
+        Hay proveedores que en cada evento mandan la respuesta acumulada en
+        lugar del trozo nuevo; anadirla la duplicaria.
+        """
+        await self._set(text)
+
+    async def _set(self, text: str) -> None:
+        self.text = text
         self._dirty = True
         now = time.monotonic()
         if now - self._last_render >= _RENDER_INTERVAL:
@@ -221,13 +234,15 @@ class ChatInput(TextArea):
 class ChatTab(Vertical):
     """Una conversacion: mensajes, entrada y su sesion de Claude."""
 
-    def __init__(self, model_key: str, tab_id: str, theme_key: str, workdir: str) -> None:
+    def __init__(self, model_ref: str, tab_id: str, theme_key: str, workdir: str) -> None:
         super().__init__()
-        self.model_key = model_key
         self.tab_id = tab_id
         self.theme_key = theme_key
         self.workdir = workdir
-        self.session = ClaudeSession()
+        # Cada pestana lleva su propia sesion, con su proveedor y su modelo:
+        # cambiar de IA aqui no toca ninguna otra pestana.
+        self.session = ChatSession()
+        self.session.set_model_ref(normalise_ref(model_ref))
         self.assistant_widget: AssistantMessage | None = None
         self.is_loading = False
         self.message_count = 0
@@ -236,6 +251,10 @@ class ChatTab(Vertical):
         self.history_pos = 0
         self.attachments: list[tuple[str, str]] = []
         self.title = ""
+
+    @property
+    def model_ref(self) -> str:
+        return self.session.model_ref
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="chat-wrap"):
@@ -279,7 +298,8 @@ class TermApp(App):
 
     theme_key: reactive[str] = reactive(DEFAULT_THEME)
     effort: reactive[str] = reactive("high")
-    current_model: reactive[str] = reactive("default")
+    # Modelo con el que nace una pestana nueva. Las que ya existen no lo miran.
+    current_model: reactive[str] = reactive(DEFAULT_MODEL_REF)
     tab_counter: var[int] = var(0)
 
     def __init__(self, workdir: str = "", theme: str = "", lang: str = "") -> None:
@@ -303,7 +323,7 @@ class TermApp(App):
         self.workdir = workdir or cfg["workdir"]
         self.theme_key = theme or cfg["theme"]
         self.effort = cfg["effort"]
-        self.current_model = cfg["model"]
+        self.current_model = normalise_ref(cfg["model"])
 
     # ------------------------------------------------------------------ i18n
 
@@ -530,8 +550,8 @@ class TermApp(App):
         put("#status-cost",
             f"[bold]{self._t('cost_label')}:[/] ${cost:.4f}" if cost else "")
 
-        model_key = chat.model_key if chat else self.current_model
-        put("#status-model", f"[bold]{self._t('model_label')}:[/] {model_label(model_key)}")
+        ref = chat.model_ref if chat else self.current_model
+        put("#status-model", f"[bold]{self._t('model_label')}:[/] {model_label(ref)}")
         put("#status-git", f" {self._git_branch}" if self._git_branch else "")
 
         wd = self.workdir
@@ -683,10 +703,10 @@ class TermApp(App):
         self._refresh_status()
         self._refresh_hint()
 
-    async def _create_tab(self, name: str | None = None, model_key: str | None = None) -> None:
+    async def _create_tab(self, name: str | None = None, model_ref: str | None = None) -> None:
         tab_id = self._next_tab_id()
         chat = ChatTab(
-            model_key or self.current_model, tab_id, self.theme_key, self.workdir
+            model_ref or self.current_model, tab_id, self.theme_key, self.workdir
         )
         self._tabs[tab_id] = chat
         chat.title = name or f"Chat {len(self._tabs)}"
@@ -964,7 +984,6 @@ class TermApp(App):
         try:
             stream = chat.session.run(
                 prompt,
-                model=chat.model_key,
                 effort=self.effort,
                 workdir=chat.workdir or self.workdir,
                 system_prompt=build_system_context(self._lang, macos=sysctl.IS_MACOS),
@@ -973,7 +992,10 @@ class TermApp(App):
             )
             async for event in stream:
                 if event.kind == "text" and assistant is not None:
-                    await assistant.append(event.text)
+                    if event.replaces_text:
+                        await assistant.replace(event.text)
+                    else:
+                        await assistant.append(event.text)
                     if area is not None:
                         area.scroll_end(animate=False)
 
@@ -996,11 +1018,16 @@ class TermApp(App):
 
                 elif event.kind == "error":
                     errored = True
-                    message = (
-                        self._t("claude_missing")
-                        if event.text == "claude-not-found"
-                        else f"Error: {event.text}"
-                    )
+                    if event.text.startswith("missing:"):
+                        binario = event.text.split(":", 1)[1]
+                        provider = chat.session.provider
+                        message = (
+                            self._t("claude_missing") if binario == "claude"
+                            else f"{provider.name}: no se encuentra `{binario}`."
+                                 f" Instala con: {provider.install_hint}"
+                        )
+                    else:
+                        message = f"Error: {event.text}"
                     await self._post_error(chat.tab_id, message)
 
         except asyncio.CancelledError:
@@ -1022,7 +1049,7 @@ class TermApp(App):
                 chat.session.session_id,
                 title=chat.title,
                 workdir=chat.workdir or self.workdir,
-                model=chat.model_key,
+                model=chat.model_ref,
                 messages=chat.message_count,
             )
 
@@ -1070,12 +1097,13 @@ class TermApp(App):
             self._focus_input(tab_id)
 
         elif kind == "model":
-            keys = list(AI_MODELS)
-            choice = None
-            if text.isdigit() and 1 <= int(text) <= len(keys):
-                choice = keys[int(text) - 1]
+            refs = [ref for ref, _, _ in catalog()]
+            choice = ""
+            if text.isdigit() and 1 <= int(text) <= len(refs):
+                choice = refs[int(text) - 1]
             elif text:
-                choice = resolve_model(text)[0]
+                # Cualquier `proveedor/modelo` vale, aunque no este en la lista.
+                choice = normalise_ref(text)
             if choice:
                 await self._create_tab(self._pending_tab_name, choice)
             else:
@@ -1249,7 +1277,7 @@ class TermApp(App):
         elif cmd == "/status":
             usage = chat.session.usage if chat else None
             self.notify(
-                f"{self._t('model_label')}: {model_label(chat.model_key if chat else self.current_model)} | "
+                f"{self._t('model_label')}: {model_label(chat.model_ref if chat else self.current_model)} | "
                 f"{self._t('effort_label')}: {self.effort} | "
                 f"{self._t('theme_set')}: {THEMES[self.theme_key]['name']} | "
                 f"{self._t('cost_label')}: ${usage.total_cost_usd:.4f}" if usage
@@ -1275,11 +1303,13 @@ class TermApp(App):
     # ------------------------------------------------------- comandos concretos
 
     async def _cmd_new(self, arg: str, tab_id: str) -> None:
+        conocidos = {ref for ref, _, _ in catalog()}
         name: str | None = None
         model: str | None = None
         for token in arg.split():
-            if token in AI_MODELS:
-                model = token
+            # Un token con barra o de la lista es el modelo; el resto, el nombre.
+            if token in conocidos or "/" in token:
+                model = normalise_ref(token)
             elif name is None:
                 name = token
             else:
@@ -1289,14 +1319,18 @@ class TermApp(App):
             return
 
         self._pending_tab_name = name
-        lines = [
-            f"  [bold]{i}[/]) [bold]{entry['name']}[/] ({key})"
-            for i, (key, entry) in enumerate(AI_MODELS.items(), 1)
-        ]
+        entradas = catalog()
+        lines = []
+        proveedor_actual = ""
+        for i, (ref, etiqueta, proveedor) in enumerate(entradas, 1):
+            if proveedor != proveedor_actual:
+                lines.append(f"\n  [bold]{proveedor}[/]")
+                proveedor_actual = proveedor
+            lines.append(f"    [bold]{i}[/]) {etiqueta}  [dim]{ref}[/]")
         await self._post_info(
             tab_id,
-            f"[bold]{self._t('select_model')}:[/]\n\n" + "\n".join(lines)
-            + f"\n\n[dim]{self._t('type_number', n=len(AI_MODELS))}[/]",
+            f"[bold]{self._t('select_model')}:[/]\n" + "\n".join(lines)
+            + f"\n\n[dim]{self._t('type_number', n=len(entradas))}[/]",
             widget_id="dialog",
         )
         self._awaiting = "model"
@@ -1408,18 +1442,33 @@ class TermApp(App):
             self.notify(self._t("copy_error", err=result.reason), timeout=3)
 
     def _cmd_model(self, arg: str, chat: ChatTab | None) -> None:
+        """Cambiar el modelo de ESTA pestana, sin tocar las demas."""
         if not arg:
-            self.notify(f"{self._t('models_list')}: {', '.join(AI_MODELS)}", timeout=3)
+            self.notify(
+                f"{self._t('models_list')}: "
+                + ", ".join(ref for ref, _, _ in catalog()[:6]),
+                timeout=4,
+            )
             return
-        key, _ = resolve_model(arg)
-        self.current_model = key
+        ref = normalise_ref(arg)
+        provider_key, _ = split_ref(ref)
+        provider = get_provider(provider_key)
+        if not provider.available():
+            self.notify(
+                f"{provider.name}: {self._t('not_installed', name=provider.binary)}"
+                f" · {provider.install_hint}",
+                timeout=6,
+            )
+            return
         if chat:
-            chat.model_key = key
+            chat.session.set_model_ref(ref)
+        # Las pestanas nuevas heredan la ultima eleccion; las abiertas, no.
+        self.current_model = ref
         self._refresh_status()
-        known = key in AI_MODELS
+        conocidos = {r for r, _, _ in catalog()}
         self.notify(
-            f"{self._t('model_set')}: {model_label(key)}" if known
-            else self._t("model_set_custom", name=key),
+            f"{self._t('model_set')}: {model_label(ref)}" if ref in conocidos
+            else self._t("model_set_custom", name=ref),
             timeout=2,
         )
 
@@ -1580,14 +1629,15 @@ class TermApp(App):
 
     def _panel_settings(self) -> str:
         chat = self._active_chat()
-        model_key = chat.model_key if chat else self.current_model
+        model_key = chat.model_ref if chat else self.current_model
         return (
             f"[bold]{self._t('settings_title')}[/]\n\n"
             f"{self._t('theme_set')}: [bold]{THEMES[self.theme_key]['name']}[/]\n"
             f"  {self._t('available')}: {', '.join(theme_names())}\n"
             f"  {self._t('change_cmd')}: [bold]/theme <nombre>[/]\n\n"
             f"{self._t('model_label')}: [bold]{model_label(model_key)}[/]\n"
-            f"  {self._t('available')}: {', '.join(AI_MODELS)}\n"
+            f"  {self._t('available')}: "
+            f"{', '.join(ref for ref, _, _ in catalog()[:8])}\n"
             f"  {self._t('change_cmd')}: [bold]/model <nombre>[/]\n\n"
             f"{self._t('effort_label')}: [bold]{self.effort}[/]\n"
             f"  {self._t('levels')}: {', '.join(EFFORT_LEVELS)}\n"

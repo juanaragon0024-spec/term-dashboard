@@ -286,7 +286,7 @@ class TestComandos:
         await application._handle_command(
             "/model claude-opus-4-5-20251101", application._active_tab_id())
         await pilot.pause()
-        assert application.current_model == "claude-opus-4-5-20251101"
+        assert application.current_model == "claude/claude-opus-4-5-20251101"
 
     async def test_lang_cambia_el_idioma_y_lo_guarda(self, app):
         application, pilot = app
@@ -486,3 +486,79 @@ class TestDisposicion:
         await area.mount(largo)
         await pilot.pause()
         assert corto.region.width < largo.region.width
+
+
+class TestPestanasConIaPropia:
+    """Cada pestaña usa la IA que quiera sin alterar a las demás."""
+
+    async def test_cambiar_el_modelo_solo_afecta_a_la_pestana_activa(self, app):
+        application, pilot = app
+        primera = application._active_chat()
+        await application.action_new_tab()
+        await pilot.pause()
+        segunda = application._active_chat()
+        assert primera is not segunda
+
+        await application._handle_command("/model claude/haiku", segunda.tab_id)
+        await pilot.pause()
+
+        assert segunda.model_ref == "claude/haiku"
+        assert primera.model_ref != "claude/haiku"
+
+    async def test_una_pestana_puede_usar_otro_proveedor(self, app):
+        application, pilot = app
+        await application.action_new_tab()
+        await pilot.pause()
+        chat = application._active_chat()
+
+        # Solo se puede cambiar a un proveedor instalado; si opencode no está
+        # en esta máquina, el comando avisa en lugar de dejar la pestaña rota.
+        from term.providers import get_provider
+
+        if not get_provider("opencode").available():
+            pytest.skip("opencode no está instalado")
+
+        await application._handle_command("/model opencode/gpt-5.2", chat.tab_id)
+        await pilot.pause()
+        assert chat.session.provider_key == "opencode"
+        assert chat.session.build_command("hola")[0] == "opencode"
+
+    async def test_no_deja_elegir_un_proveedor_que_no_esta_instalado(self, app):
+        application, pilot = app
+        chat = application._active_chat()
+        antes = chat.model_ref
+        # ollama no está instalado en el entorno de pruebas.
+        from term.providers import get_provider
+
+        if get_provider("ollama").available():
+            pytest.skip("ollama sí está instalado aquí")
+
+        await application._handle_command("/model ollama/llama3.3", chat.tab_id)
+        await pilot.pause()
+        assert chat.model_ref == antes
+
+    async def test_las_pestanas_nuevas_heredan_la_ultima_eleccion(self, app):
+        application, pilot = app
+        await application._handle_command(
+            "/model claude/sonnet", application._active_tab_id())
+        await pilot.pause()
+        await application.action_new_tab()
+        await pilot.pause()
+        assert application._active_chat().model_ref == "claude/sonnet"
+
+    async def test_new_con_modelo_explicito(self, app):
+        application, pilot = app
+        await application._handle_command(
+            "/new Pruebas claude/haiku", application._active_tab_id())
+        await pilot.pause()
+        chat = application._active_chat()
+        assert chat.model_ref == "claude/haiku"
+        assert chat.title == "Pruebas"
+
+    async def test_cada_pestana_lleva_su_propio_hilo(self, app):
+        application, pilot = app
+        primera = application._active_chat()
+        await application.action_new_tab()
+        await pilot.pause()
+        segunda = application._active_chat()
+        assert primera.session.session_id != segunda.session.session_id
