@@ -209,10 +209,15 @@ Underline {
     margin: 0;
     padding: 1;
 }
-/* Los dialogos son listas: centrarlas las hace ilegibles. */
-#dialog {
+/* Los dialogos y los listados de rutas son listas: centrarlos los hace
+   ilegibles, y una ruta partida a la mitad no se puede copiar. */
+#dialog,
+.listing {
     text-align: left;
-    padding: 1 3;
+    padding: 1 2;
+}
+.listing {
+    color: $text;
 }
 
 /* -- Panels -- */

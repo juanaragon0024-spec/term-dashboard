@@ -678,9 +678,17 @@ class TermApp(App):
         await area.mount(widget)
         area.scroll_end(animate=False)
 
-    async def _post_info(self, tab_id: str, text: str, widget_id: str = "") -> None:
+    async def _post_info(
+        self, tab_id: str, text: str, widget_id: str = "", listing: bool = False,
+    ) -> None:
         kwargs = {"id": widget_id} if widget_id else {}
-        await self._post(tab_id, Static(text, classes="info-block", **kwargs))
+        clases = "info-block listing" if listing else "info-block"
+        await self._post(tab_id, Static(text, classes=clases, **kwargs))
+
+    def _hits_label(self, count: int, query: str) -> str:
+        """Encabezado de un listado, con el singular escrito aparte."""
+        key = "search_results_one" if count == 1 else "search_results"
+        return self._t(key, count=count, query=query)
 
     async def _post_error(self, tab_id: str, text: str) -> None:
         await self._post(tab_id, Static(text, classes="error-block"))
@@ -1230,6 +1238,18 @@ class TermApp(App):
         elif cmd == "/attach":
             self._cmd_attach(arg, chat)
 
+        elif cmd == "/mkdir":
+            await self._cmd_mkdir(arg, tab_id)
+
+        elif cmd == "/touch":
+            await self._cmd_touch(arg, tab_id)
+
+        elif cmd in ("/find", "/findall"):
+            await self._cmd_find(arg, tab_id, spotlight=(cmd == "/findall"))
+
+        elif cmd == "/grep":
+            await self._cmd_grep(arg, tab_id)
+
         elif cmd == "/detach":
             if chat:
                 chat.attachments.clear()
@@ -1261,7 +1281,12 @@ class TermApp(App):
             self._cmd_browser(arg)
 
         elif cmd == "/volume":
-            if arg.isdigit() and 0 <= int(arg) <= 100:
+            if not arg:
+                actual = sysctl.get_volume()
+                self.notify(
+                    self._t("volume_set", val=actual.output) if actual
+                    else self._t("volume_usage"), timeout=2)
+            elif arg.isdigit() and 0 <= int(arg) <= 100:
                 result = sysctl.set_volume(int(arg))
                 if result:
                     self.notify(self._t("volume_set", val=arg), timeout=1)
@@ -1270,8 +1295,25 @@ class TermApp(App):
             else:
                 self.notify(self._t("volume_usage"), timeout=2)
 
-        elif cmd in ("/play", "/next", "/prev", "/track"):
-            self._cmd_spotify(cmd)
+        elif cmd in ("/play", "/pause", "/next", "/prev", "/track"):
+            self._cmd_music(cmd)
+
+        elif cmd in ("/web", "/yt", "/maps"):
+            self._cmd_web(cmd, arg)
+
+        elif cmd == "/close-app":
+            if arg:
+                result = sysctl.quit_app(arg)
+                self.notify(f"{arg}: cerrada" if result else result.reason, timeout=2)
+            else:
+                self.notify(self._t("open_usage"), timeout=2)
+
+        elif cmd == "/sysinfo":
+            result = sysctl.system_info()
+            if result:
+                await self._post_info(tab_id, result.output, listing=True)
+            else:
+                self._notify_sys_failure(result)
 
         # -- meta -----------------------------------------------------------
         elif cmd == "/status":
@@ -1399,7 +1441,7 @@ class TermApp(App):
         if not hits:
             self.notify(self._t("search_none", query=arg), timeout=3)
             return
-        header = self._t("search_results", count=len(hits), query=arg)
+        header = self._hits_label(len(hits), arg)
         await self._post(
             tab_id,
             Static(f"[bold]{header}[/]\n\n" + "\n".join(hits[:25]), classes="search-hit"),
@@ -1540,7 +1582,8 @@ class TermApp(App):
             )
             return
         await self._post_info(
-            tab_id, f"[dim]$ {arg}[/]\n\n{result.output or self._t('no_output')}"
+            tab_id, f"[dim]$ {arg}[/]\n\n{result.output or self._t('no_output')}",
+            listing=True,
         )
 
     async def _cmd_browse(self, arg: str, tab_id: str) -> None:
@@ -1589,19 +1632,99 @@ class TermApp(App):
         self._persist()
         self.notify(self._t("default_browser_set", name=app_name), timeout=2)
 
-    def _cmd_spotify(self, cmd: str) -> None:
+    def _cmd_music(self, cmd: str) -> None:
+        """Control del reproductor que esté abierto, sea Spotify o Music."""
         actions = {
-            "/play": ("playpause", "play_pause"),
+            "/play": ("play", "play_pause"),
+            "/pause": ("pause", "play_pause"),
             "/next": ("next", "next_track"),
             "/prev": ("previous", "prev_track"),
             "/track": ("track", ""),
         }
         action, key = actions[cmd]
-        result = sysctl.spotify(action)
+        result = sysctl.music(action)
         if not result:
             self._notify_sys_failure(result)
             return
-        self.notify(result.output or self._t(key), timeout=2)
+        self.notify(result.output or self._t(key), timeout=3)
+
+    def _cmd_web(self, cmd: str, arg: str) -> None:
+        """Abrir una búsqueda en el navegador."""
+        engines = {"/web": "google", "/yt": "youtube", "/maps": "maps"}
+        if not arg:
+            self.notify(self._t("search_usage"), timeout=2)
+            return
+        result = sysctl.web_search(
+            arg, engines[cmd], self._default_browser)
+        if result:
+            self.notify(self._t("opening", name=arg), timeout=2)
+        else:
+            self._notify_sys_failure(result)
+
+    async def _cmd_mkdir(self, arg: str, tab_id: str) -> None:
+        if not arg:
+            self.notify("Uso: /mkdir <ruta>", timeout=2)
+            return
+        result = sysctl.make_dir(arg, self.workdir)
+        if not result:
+            self.notify(result.reason.replace("|", ": "), timeout=4)
+            return
+        self._refresh_file_panel()
+        detalle = f" ({result.reason})" if result.reason else ""
+        await self._post_info(
+            tab_id, f"[bold]Carpeta[/] {result.output}{detalle}", listing=True)
+
+    async def _cmd_touch(self, arg: str, tab_id: str) -> None:
+        if not arg:
+            self.notify("Uso: /touch <ruta>", timeout=2)
+            return
+        result = sysctl.write_file(arg, "", self.workdir)
+        if not result:
+            self.notify(result.reason.replace("|", ": "), timeout=4)
+            return
+        self._refresh_file_panel()
+        await self._post_info(
+            tab_id, f"[bold]Archivo[/] {result.output}", listing=True)
+
+    async def _cmd_find(self, arg: str, tab_id: str, *, spotlight: bool) -> None:
+        """Buscar archivos y devolver sus rutas completas."""
+        if not arg:
+            self.notify("Uso: /find <patrón>", timeout=2)
+            return
+        result = sysctl.find_files(
+            arg, "" if spotlight else self.workdir, spotlight=spotlight)
+        if not result:
+            self.notify(result.reason.replace("|", ": "), timeout=4)
+            return
+        rutas = [r for r in result.output.splitlines() if r]
+        if not rutas:
+            self.notify(self._t("search_none", query=arg), timeout=3)
+            return
+        cuerpo = "\n".join(f"  {r}" for r in rutas)
+        await self._post_info(
+            tab_id,
+            f"[bold]{self._hits_label(len(rutas), arg)}[/]\n\n{cuerpo}",
+            listing=True,
+        )
+
+    async def _cmd_grep(self, arg: str, tab_id: str) -> None:
+        if not arg:
+            self.notify("Uso: /grep <texto>", timeout=2)
+            return
+        result = sysctl.search_text(arg, self.workdir)
+        if not result:
+            self.notify(result.reason.replace("|", ": "), timeout=4)
+            return
+        lineas = [ln for ln in result.output.splitlines() if ln]
+        if not lineas:
+            self.notify(self._t("search_none", query=arg), timeout=3)
+            return
+        cuerpo = "\n".join(f"  {ln}" for ln in lineas)
+        await self._post_info(
+            tab_id,
+            f"[bold]{self._hits_label(len(lineas), arg)}[/]\n\n{cuerpo}",
+            listing=True,
+        )
 
     # ------------------------------------------------------------ paneles
 

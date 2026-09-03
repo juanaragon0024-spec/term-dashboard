@@ -37,6 +37,11 @@ COMMANDS_HELP: dict[str, str] = {
     "/files":                 "Mostrar u ocultar el panel de archivos",
     "/attach <ruta>":         "Adjuntar un archivo al siguiente mensaje",
     "/detach":                "Descartar los archivos adjuntos pendientes",
+    "/mkdir <ruta>":          "Crear una carpeta (con sus padres si hacen falta)",
+    "/touch <ruta>":          "Crear un archivo vacío",
+    "/find <patrón>":         "Buscar archivos por nombre y mostrar sus rutas",
+    "/findall <patrón>":      "Buscar en todo el disco con Spotlight",
+    "/grep <texto>":          "Buscar un texto dentro de los archivos",
     # Paneles
     "/help":                  "Panel de ayuda",
     "/apps":                  "Panel de aplicaciones",
@@ -45,13 +50,19 @@ COMMANDS_HELP: dict[str, str] = {
     # Sistema
     "/run <cmd>":             "Ejecutar un comando de shell y mostrar la salida",
     "/open <app>":            "Abrir una aplicación (ej. /open Safari)",
+    "/close-app <app>":       "Cerrar una aplicación",
     "/browse [url]":          "Abrir una URL en el navegador",
     "/browser <nombre>":      "Establecer el navegador por defecto",
-    "/volume <0-100>":        "Ajustar el volumen del sistema",
-    "/play":                  "Play/pausa en Spotify",
-    "/next":                  "Siguiente canción en Spotify",
-    "/prev":                  "Canción anterior en Spotify",
-    "/track":                 "Canción que suena ahora en Spotify",
+    "/web <consulta>":        "Buscar en Google desde el navegador",
+    "/yt <consulta>":         "Buscar en YouTube",
+    "/maps <lugar>":          "Buscar un lugar en Google Maps",
+    "/volume [0-100]":        "Ver o ajustar el volumen del sistema",
+    "/play":                  "Reanudar la música",
+    "/pause":                 "Pausar la música",
+    "/next":                  "Siguiente canción",
+    "/prev":                  "Canción anterior",
+    "/track":                 "Qué canción suena ahora",
+    "/sysinfo":               "Batería, disco, red, volumen y música",
     # Meta
     "/status":                "Estado actual de la tab",
     "/reset":                 "Reiniciar el contador de contexto",
@@ -110,11 +121,22 @@ _SYSTEM_BASE = (
 )
 
 _MACOS_HINTS = (
-    "\nEstás en macOS. Para controlar el sistema usa osascript:\n"
+    "\nEstás en macOS y tienes shell, así que puedes actuar sobre el sistema.\n"
+    "Recetas que funcionan:\n"
+    "- Crear una carpeta: mkdir -p ruta/de/la/carpeta\n"
+    "- Buscar archivos por nombre: mdfind -name 'parte-del-nombre'\n"
+    "  (rápido, usa el índice de Spotlight; para un proyecto concreto usa `rg --files`)\n"
+    "- Buscar texto dentro de archivos: rg -n 'texto' ruta/\n"
     "- Abrir una app: open -a \"Safari\"\n"
-    "- Play/pausa: osascript -e 'tell application \"Spotify\" to playpause'\n"
-    "- Canción siguiente: osascript -e 'tell application \"Spotify\" to next track'\n"
-    "- Volumen: osascript -e 'set volume output volume 50'\n"
+    "- Abrir una web: open 'https://ejemplo.com'\n"
+    "- Buscar en Google: open 'https://www.google.com/search?q=lo+que+sea'\n"
+    "- Música (Spotify o Music, el que esté abierto):\n"
+    "    osascript -e 'tell application \"Spotify\" to playpause'\n"
+    "    osascript -e 'tell application \"Spotify\" to next track'\n"
+    "    osascript -e 'tell application \"Spotify\" to name of current track'\n"
+    "- Volumen: osascript -e 'set volume output volume 50'\n\n"
+    "Cuando el usuario te pida una ruta, dásela completa y absoluta.\n"
+    "Antes de borrar o sobrescribir algo, pregunta.\n"
 )
 
 

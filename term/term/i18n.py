@@ -1131,6 +1131,13 @@ _EXTRA: dict[str, dict[str, str]] = {
         "zh": "「{query}」有 {count} 处匹配", "ja": "「{query}」に {count} 件一致",
         "ko": "'{query}' 검색 결과 {count}건", "ar": "{count} نتيجة لـ «{query}»",
     },
+    "search_results_one": {
+        "es": "1 coincidencia de «{query}»", "en": "1 match for \"{query}\"",
+        "pt": "1 correspondência de «{query}»", "fr": "1 résultat pour « {query} »",
+        "de": "1 Treffer für „{query}“", "it": "1 corrispondenza per «{query}»",
+        "zh": "「{query}」有 1 处匹配", "ja": "「{query}」に 1 件一致",
+        "ko": "'{query}' 검색 결과 1건", "ar": "نتيجة واحدة لـ «{query}»",
+    },
     "search_none": {
         "es": "Sin coincidencias de «{query}»", "en": "No matches for \"{query}\"",
         "pt": "Sem correspondências de «{query}»", "fr": "Aucun résultat pour « {query} »",
