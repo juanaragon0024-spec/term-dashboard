@@ -14,7 +14,7 @@ __all__ = [
 # `alias` es lo que se le pasa a `claude --model`. None significa no pasar el
 # flag y dejar que la CLI use el modelo configurado por el usuario.
 AI_MODELS: dict[str, dict[str, str | None]] = {
-    "default": {"name": "Claude (predeterminado)", "alias": None},
+    "default": {"name": "Claude", "alias": None},
     "opus": {"name": "Claude Opus", "alias": "opus"},
     "sonnet": {"name": "Claude Sonnet", "alias": "sonnet"},
     "haiku": {"name": "Claude Haiku", "alias": "haiku"},

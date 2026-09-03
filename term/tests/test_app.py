@@ -441,3 +441,48 @@ class TestPestanaDeChat:
         a = ChatTab("default", "chat1", "neon", "/tmp")
         b = ChatTab("default", "chat2", "neon", "/tmp")
         assert a.session.session_id != b.session.session_id
+
+
+class TestDisposicion:
+    """Los fallos de layout que trajo compactar la interfaz."""
+
+    async def test_la_barra_de_estado_no_se_solapa_con_el_pie(self, app):
+        """Con las dos barras a una línea, ambas peleaban por la última fila
+        y la de estado quedaba invisible bajo el pie."""
+        from textual.widgets import Footer
+
+        application, _ = app
+        estado = application.query_one("#status-bar")
+        pie = application.query_one(Footer)
+        assert estado.region.y != pie.region.y
+        assert estado.region.y < pie.region.y
+
+    async def test_la_barra_superior_tiene_alto_util(self, app):
+        """Con height 1, el borde inferior se comía la única línea y dejaba
+        la barra con cero filas de contenido."""
+        application, _ = app
+        assert application.query_one("#top-bar").size.height >= 1
+
+    async def test_una_respuesta_corta_no_dibuja_un_marco_enorme(self, app):
+        """Un Vertical se estira a todo el alto disponible: sin height auto,
+        una línea de respuesta ocupaba media pantalla."""
+        application, pilot = app
+        area = await application._msgs(application._active_tab_id())
+        mensaje = AssistantMessage()
+        await area.mount(mensaje)
+        await pilot.pause()
+        await mensaje.append("una línea")
+        await mensaje.flush()
+        await pilot.pause()
+        assert mensaje.region.height <= 6
+
+    async def test_el_globo_del_usuario_se_ajusta_al_texto(self, app):
+        """Un 'Gracias' no debería ocupar el ancho entero de la terminal."""
+        application, pilot = app
+        area = await application._msgs(application._active_tab_id())
+        corto = UserMessage("Hola")
+        largo = UserMessage("Hola, " + "texto de relleno " * 6)
+        await area.mount(corto)
+        await area.mount(largo)
+        await pilot.pause()
+        assert corto.region.width < largo.region.width

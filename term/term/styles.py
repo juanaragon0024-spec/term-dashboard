@@ -16,10 +16,9 @@ Screen {
 /* -- Top bar -- */
 #top-bar {
     dock: top;
-    height: 2;
+    height: 1;
     background: $bg2;
-    border-bottom: solid $border;
-    padding: 0 2;
+    padding: 0 1;
 }
 #top-bar-title {
     color: $accent1;
@@ -43,6 +42,7 @@ Screen {
 /* -- Main area -- */
 #main {
     background: $bg1;
+    height: 1fr;
 }
 TabbedContent {
     background: $bg1;
@@ -61,8 +61,8 @@ Tabs {
 Tab {
     background: $bg2;
     color: $muted;
-    padding: 0 3;
-    min-width: 12;
+    padding: 0 2;
+    min-width: 10;
     text-style: bold;
 }
 Tab:hover {
@@ -83,31 +83,28 @@ Underline {
 }
 .messages {
     background: $bg1;
-    padding: 1 2;
+    padding: 0 1;
     scrollbar-color: $border;
     scrollbar-color-hover: $accent1;
 }
 .user-msg {
     color: $text;
-    margin: 1 2 0 16;
-    padding: 1 2;
-    border: none;
-    background: transparent;
-    text-align: right;
-}
-.user-msg-inner {
-    background: $bg3;
-    color: $text;
-    padding: 1 2;
-    border: solid $accent2;
+    background: $bg2;
+    height: auto;
+    width: auto;
+    max-width: 80%;
+    margin: 0 0 1 6;
+    padding: 0 1;
+    border: round $accent2;
     text-align: left;
 }
 .assistant-msg {
     background: transparent;
     color: $text;
-    margin: 0 8 1 2;
-    padding: 0 2 1 2;
-    border: none;
+    height: auto;
+    margin: 0 6 1 0;
+    padding: 0 1;
+    border: round $border;
 }
 .assistant-msg Markdown {
     margin: 0;
@@ -115,8 +112,8 @@ Underline {
 }
 .assistant-msg MarkdownFence {
     background: #0d1117;
-    border: solid $border;
-    margin: 1 0;
+    border: round $border;
+    margin: 0;
 }
 .assistant-msg MarkdownH1,
 .assistant-msg MarkdownH2,
@@ -136,7 +133,7 @@ Underline {
     height: auto;
     max-height: 12;
     background: $bg1;
-    padding: 0 8;
+    padding: 0 1;
 }
 .chat-input {
     background: $bg2;
@@ -154,7 +151,7 @@ Underline {
     height: 1;
     color: $muted;
     background: $bg1;
-    padding: 0 10;
+    padding: 0 2;
 }
 
 /* -- Command suggestions -- */
@@ -174,8 +171,7 @@ Underline {
 
 /* -- Status bar -- */
 #status-bar {
-    dock: bottom;
-    height: 2;
+    height: 1;
     background: $bg2;
     color: $muted;
     padding: 0 2;
@@ -210,8 +206,8 @@ Underline {
 .info-block {
     color: $muted;
     text-align: center;
-    margin: 2 0;
-    padding: 2;
+    margin: 0;
+    padding: 1;
 }
 
 /* -- Panels -- */
@@ -227,7 +223,7 @@ Underline {
 Footer {
     background: $bg2;
     color: $muted;
-    height: 2;
+    height: 1;
     text-style: bold;
 }
 
@@ -268,8 +264,9 @@ Footer {
 .tool-event {
     color: $accent3;
     background: $bg2;
-    margin: 0 8 0 2;
-    padding: 0 2;
+    height: 1;
+    margin: 0 6 0 0;
+    padding: 0 1;
     border-left: outer $accent3;
 }
 .tool-event-detail {
