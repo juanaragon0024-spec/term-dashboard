@@ -11,7 +11,6 @@ import json
 import pytest
 
 from term.providers import (
-    PROVIDERS,
     ClaudeProvider,
     OllamaProvider,
     OpencodeProvider,
@@ -23,10 +22,16 @@ from term.providers import (
 
 class TestRegistro:
     def test_cada_proveedor_se_registra_con_su_clave(self):
-        for key, provider in PROVIDERS.items():
+        from term.providers import all_providers
+
+        for key, provider in all_providers().items():
             assert provider.key == key
             assert provider.name
-            assert provider.binary
+            # Los de línea de comandos necesitan un binario; los de API, no.
+            if provider.transport == "cli":
+                assert provider.binary
+            else:
+                assert provider.base_url
 
     def test_un_proveedor_desconocido_cae_en_claude(self):
         assert get_provider("no-existe").key == "claude"

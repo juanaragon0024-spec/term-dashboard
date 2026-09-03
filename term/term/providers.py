@@ -65,6 +65,9 @@ class Provider(ABC):
     key: str = ""
     name: str = ""
     binary: str = ""
+    # "cli" habla con un programa por su linea de comandos; "api" habla por
+    # HTTP y ejecuta las herramientas dentro de Term.
+    transport: str = "cli"
     # Si la CLI sabe retomar una conversacion. Sin esto, cada turno empieza
     # de cero y la pestana no tiene memoria.
     supports_sessions: bool = False
@@ -383,17 +386,48 @@ PROVIDERS: dict[str, Provider] = {
     p.key: p for p in (ClaudeProvider(), OpencodeProvider(), OllamaProvider())
 }
 
+
+_apis_registradas = False
+
+
+def _ensure_api_providers() -> None:
+    """Sumar los proveedores por API al registro, la primera vez que se miran.
+
+    El registro es perezoso a proposito: `apis` importa de aqui, asi que
+    hacerlo al cargar el modulo produce un import circular en cuanto alguien
+    importa `apis` antes que `providers`.
+    """
+    global _apis_registradas
+    if _apis_registradas:
+        return
+    _apis_registradas = True
+    from .apis import API_PROVIDERS
+
+    PROVIDERS.update(API_PROVIDERS)
+
 DEFAULT_PROVIDER = "claude"
+
+
+def all_providers() -> dict[str, Provider]:
+    """El registro completo, con los de API ya cargados."""
+    _ensure_api_providers()
+    return PROVIDERS
 
 
 def get_provider(key: str) -> Provider:
     """Proveedor por clave, con reserva al predeterminado."""
-    return PROVIDERS.get(key) or PROVIDERS[DEFAULT_PROVIDER]
+    registro = all_providers()
+    return registro.get(key) or registro[DEFAULT_PROVIDER]
 
 
 def available_providers() -> list[Provider]:
-    """Los que estan instalados en esta maquina."""
-    return [p for p in PROVIDERS.values() if p.available()]
+    """Los que se pueden usar aqui: instalados, o con su clave puesta."""
+    return [p for p in all_providers().values() if p.available()]
+
+
+def api_providers() -> list[Provider]:
+    """Los que se conectan por HTTP, esten configurados o no."""
+    return [p for p in all_providers().values() if p.transport == "api"]
 
 
 def split_ref(ref: str) -> tuple[str, str]:
@@ -405,10 +439,11 @@ def split_ref(ref: str) -> tuple[str, str]:
     ref = (ref or "").strip()
     if not ref:
         return DEFAULT_PROVIDER, "default"
+    registro = all_providers()
     head, _, tail = ref.partition("/")
-    if head in PROVIDERS and tail:
+    if head in registro and tail:
         return head, tail
-    if head in PROVIDERS and not tail:
+    if head in registro and not tail:
         return head, "default"
     return DEFAULT_PROVIDER, ref
 

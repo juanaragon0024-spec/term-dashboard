@@ -31,6 +31,7 @@ from textual.widgets import (
 )
 
 from . import config as cfg_mod
+from . import keys as keystore
 from . import syscontrol as sysctl
 from .commands import (
     COMMANDS_HELP,
@@ -924,7 +925,8 @@ class TermApp(App):
             return
 
         inp.text = ""
-        chat.history.append(text)
+        # Una clave en el historial de flechas acabaría en un /export.
+        chat.history.append("/key …" if text.startswith("/key ") else text)
         chat.history_pos = len(chat.history)
 
         if text == "/":
@@ -1026,7 +1028,16 @@ class TermApp(App):
 
                 elif event.kind == "error":
                     errored = True
-                    if event.text.startswith("missing:"):
+                    if event.text.startswith("nokey:"):
+                        nombre = event.text.split(":", 1)[1]
+                        provider = chat.session.provider
+                        message = (
+                            f"{provider.name} no tiene clave configurada.\n\n"
+                            f"Guárdala con:  /key {nombre} <tu-clave>\n"
+                            f"O expórtala como {getattr(provider, 'env_hint', '')}\n\n"
+                            f"{provider.install_hint}"
+                        )
+                    elif event.text.startswith("missing:"):
                         binario = event.text.split(":", 1)[1]
                         provider = chat.session.provider
                         message = (
@@ -1223,6 +1234,15 @@ class TermApp(App):
 
         elif cmd == "/permissions":
             self._cmd_permissions(arg)
+
+        elif cmd == "/providers":
+            await self._cmd_providers(tab_id)
+
+        elif cmd == "/key":
+            self._cmd_key(arg)
+
+        elif cmd == "/key-del":
+            self._cmd_key_delete(arg)
 
         elif cmd == "/workdir":
             self._set_workdir(os.path.expanduser(arg) if arg else self.workdir)
@@ -1532,6 +1552,67 @@ class TermApp(App):
             lines.append(f"  [bold]{code}[/] - {name}{mark}")
         lines.append(f"\n[dim]{self._t('lang_usage')}[/]")
         await self._post_info(tab_id, "\n".join(lines))
+
+    async def _cmd_providers(self, tab_id: str) -> None:
+        """Estado de cada forma de conectar una IA."""
+        from .providers import all_providers
+
+        cli, api = [], []
+        for provider in all_providers().values():
+            listo = provider.available()
+            marca = "[bold green]LISTO[/]" if listo else "[dim]--[/]"
+            if provider.transport == "api":
+                clave = keystore.get_key(provider.key)
+                detalle = (f"[dim]{keystore.mask(clave)}[/]" if clave
+                           else f"[dim]{provider.install_hint}[/]")
+                api.append(f"  {marca}  [bold]{provider.name}[/] "
+                           f"([bold]{provider.key}[/])  {detalle}")
+            else:
+                detalle = ("" if listo else f"[dim]{provider.install_hint}[/]")
+                cli.append(f"  {marca}  [bold]{provider.name}[/] "
+                           f"([bold]{provider.key}[/])  {detalle}")
+
+        lineas = ["[bold]Por línea de comandos[/]  [dim]traen su propio agente[/]\n"]
+        lineas += cli
+        lineas.append("\n[bold]Por API[/]  [dim]Term ejecuta las herramientas[/]\n")
+        lineas += api
+        lineas.append("\n[dim]Guarda una clave con: /key <proveedor> <clave>[/]")
+        lineas.append("[dim]También se leen de las variables de entorno.[/]")
+        await self._post_info(tab_id, "\n".join(lineas), listing=True)
+
+    def _cmd_key(self, arg: str) -> None:
+        """Guardar la clave de un proveedor.
+
+        La clave no se repite por pantalla ni queda en el historial de la
+        pestaña: se muestra enmascarada y ya.
+        """
+        from .providers import all_providers
+
+        partes = arg.split(None, 1)
+        if len(partes) < 2:
+            self.notify("Uso: /key <proveedor> <clave>", timeout=4)
+            return
+        nombre, clave = partes[0].lower(), partes[1].strip()
+        registro = all_providers()
+        provider = registro.get(nombre)
+        if provider is None or provider.transport != "api":
+            disponibles = ", ".join(
+                p.key for p in registro.values() if p.transport == "api")
+            self.notify(f"Proveedor por API no válido. Prueba: {disponibles}",
+                        timeout=6)
+            return
+        if keystore.set_key(nombre, clave):
+            self.notify(f"{provider.name}: clave guardada ({keystore.mask(clave)})",
+                        timeout=3)
+        else:
+            self.notify("No se pudo guardar la clave", timeout=3)
+
+    def _cmd_key_delete(self, arg: str) -> None:
+        nombre = arg.strip().lower()
+        if keystore.delete_key(nombre):
+            self.notify(f"{nombre}: clave borrada", timeout=2)
+        else:
+            self.notify(f"{nombre}: no había ninguna clave guardada", timeout=3)
 
     def _cmd_permissions(self, arg: str) -> None:
         if arg in PERMISSION_MODES:

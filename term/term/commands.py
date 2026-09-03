@@ -31,6 +31,9 @@ COMMANDS_HELP: dict[str, str] = {
     "/theme <nombre>":        "Cambiar tema (neon, dracula, monokai, catppuccin, gruvbox, tokyo)",
     "/lang [código]":         f"Cambiar idioma ({', '.join(LANGUAGES)})",
     "/permissions [modo]":    "Modo de permisos (default, acceptEdits, plan, bypassPermissions)",
+    "/providers":             "Ver cómo está conectada cada IA",
+    "/key <proveedor> <clave>": "Guardar la API key de un proveedor",
+    "/key-del <proveedor>":   "Borrar la API key guardada de un proveedor",
     "/workdir <ruta>":        "Cambiar directorio de trabajo",
     "/save":                  "Guardar la configuración en disco",
     # Archivos

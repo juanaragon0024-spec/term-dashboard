@@ -20,6 +20,9 @@ classifiers = [
 dependencies = [
     "textual>=3.0",
     "rich>=13.0",
+    # Solo hace falta para los proveedores que se conectan por API; el import
+    # es diferido, así que Term arranca aunque no esté.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

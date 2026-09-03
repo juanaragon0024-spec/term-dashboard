@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Literal
 
+from . import tools as toolkit
 from .providers import DEFAULT_PROVIDER, Provider, get_provider, join_ref, split_ref
 
 __all__ = [
@@ -105,6 +106,14 @@ class ChatSession:
     proc: asyncio.subprocess.Process | None = None
     usage: Usage = field(default_factory=Usage)
     turns: int = 0
+    # Historial de la conversacion cuando se habla por API. Una CLI se acuerda
+    # sola de lo dicho; una API no recuerda nada, asi que la memoria de la
+    # pestana es literalmente esta lista.
+    history: list[dict] = field(default_factory=list)
+
+    @property
+    def is_api(self) -> bool:
+        return self.provider.transport == "api"
 
     # ------------------------------------------------------------- proveedor
 
@@ -137,6 +146,7 @@ class ChatSession:
         self.started = False
         self.usage = Usage()
         self.turns = 0
+        self.history.clear()
 
     def adopt(self, session_id: str) -> None:
         """Continuar una conversacion que ya existe en la CLI."""
@@ -176,6 +186,32 @@ class ChatSession:
 
     async def run(self, prompt: str, **kwargs: object) -> AsyncIterator[StreamEvent]:
         """Ejecutar un turno y emitir sus eventos segun llegan."""
+        if self.is_api:
+            async for event in self._run_api(prompt, **kwargs):
+                yield event
+            return
+        async for event in self._run_cli(prompt, **kwargs):
+            yield event
+
+    async def _run_api(self, prompt: str, **kwargs: object) -> AsyncIterator[StreamEvent]:
+        """Turno contra una API, con Term ejecutando las herramientas."""
+        provider = self.provider
+        ctx = toolkit.ToolContext(
+            workdir=str(kwargs.get("workdir") or ""),
+            allow_system=not bool(kwargs.get("restricted")),
+        )
+        self.history.append(provider_user_turn(provider, prompt))
+        self.started = True
+
+        async for parsed in provider.converse(  # type: ignore[attr-defined]
+            self.history,
+            model=self.model,
+            system=str(kwargs.get("system_prompt") or ""),
+            ctx=ctx,
+        ):
+            yield self._adopt(parsed)
+
+    async def _run_cli(self, prompt: str, **kwargs: object) -> AsyncIterator[StreamEvent]:
         provider = self.provider
         workdir = str(kwargs.get("workdir") or "")
         cmd = self.build_command(prompt, **kwargs)  # type: ignore[arg-type]
@@ -268,6 +304,17 @@ class ChatSession:
             usage=usage,
             session_id=parsed.session_id,
         )
+
+
+def provider_user_turn(provider: Provider, prompt: str) -> dict:
+    """El mensaje del usuario con la forma que espera cada API.
+
+    Gemini llama `parts` a lo que el resto llama `content`; escribirlo mal no
+    da un error claro, solo una conversacion que el modelo no entiende.
+    """
+    if provider.key == "gemini":
+        return {"role": "user", "parts": [{"text": prompt}]}
+    return {"role": "user", "content": prompt}
 
 
 # Las versiones anteriores solo hablaban con Claude y el nombre se quedo por el

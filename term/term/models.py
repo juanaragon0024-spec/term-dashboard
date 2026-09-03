@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from .providers import (
     DEFAULT_PROVIDER,
-    PROVIDERS,
+    all_providers,
     available_providers,
     get_provider,
     join_ref,
@@ -64,7 +64,8 @@ def catalog(only_installed: bool = True) -> list[tuple[str, str, str]]:
     Solo se ofrecen por defecto los proveedores instalados: proponer un modelo
     que no se puede ejecutar solo produce un error mas tarde.
     """
-    proveedores = available_providers() if only_installed else list(PROVIDERS.values())
+    proveedores = (available_providers() if only_installed
+                   else list(all_providers().values()))
     entradas: list[tuple[str, str, str]] = []
     for provider in proveedores:
         for model in provider.suggested_models:
