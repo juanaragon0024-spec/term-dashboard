@@ -121,6 +121,13 @@ Para desarrollar con recarga en caliente, `cd frontend && npm run dev` levanta
 Vite en el 5173 y reenvía `/api` al backend, así que sigues trabajando contra
 una sola dirección.
 
+El catálogo de comandos de la web se genera desde el de la terminal, para que
+no puedan desincronizarse. Tras tocar `term/commands.py`:
+
+```bash
+python3 scripts/gen_commands.py
+```
+
 El servidor escucha solo en `127.0.0.1` y solo sirve archivos por debajo de
 `TERM_ROOT`, que por defecto es tu carpeta personal:
 

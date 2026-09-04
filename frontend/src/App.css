@@ -670,3 +670,176 @@ body {
 .model-status.disconnected { color: var(--text-muted); border: 1px solid var(--border); }
 .model-name { color: var(--text-primary); font-weight: 600; }
 .model-key { color: var(--text-muted); }
+
+/* ── Avisos del propio Term ─────────────────────────────────────────────── */
+/* Se distinguen de las respuestas de la IA: si no, parecería que el modelo
+   contesta cosas que en realidad dice el programa. */
+.message.system {
+  max-width: 100%;
+  background: transparent;
+  border-left: 2px solid var(--accent1);
+  padding: 8px 14px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.message.system code {
+  color: var(--accent1);
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+}
+.message.system strong { color: var(--text-primary); }
+
+/* ── Barra lateral ──────────────────────────────────────────────────────── */
+.sidebar-sub {
+  color: var(--text-muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.sidebar-spacer { flex: 1; }
+.sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sidebar-badge {
+  background: var(--bg-tertiary);
+  color: var(--accent1);
+  font-size: 0.6rem;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+}
+.sidebar-status.offline .status-dot { background: var(--accent2); }
+
+/* ── Panel de ayuda ─────────────────────────────────────────────────────── */
+.help-lead {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  max-width: 62ch;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+.help-section {
+  max-width: 860px;
+  margin: 0 auto 32px;
+}
+.help-toolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.help-filters { display: flex; gap: 6px; }
+.chip {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.chip:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.chip.active {
+  color: var(--accent1);
+  border-color: var(--accent1);
+}
+.help-search {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 7px 10px;
+  margin: 12px 0 20px;
+  outline: none;
+}
+.help-search:focus { border-color: var(--accent1); }
+.help-empty {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  padding: 20px;
+}
+.help-group { margin-bottom: 22px; }
+.help-group-title {
+  color: var(--accent2);
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.help-cmd-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 0.71rem;
+}
+.help-cmd-row.solo-terminal { opacity: 0.55; }
+.help-cmd-name {
+  color: var(--accent1);
+  background: none;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.help-cmd-desc { color: var(--text-muted); }
+.help-badge {
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 0.55rem;
+  padding: 0 4px;
+  letter-spacing: 0.5px;
+}
+.help-examples {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.help-examples li {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding-left: 14px;
+  position: relative;
+}
+.help-examples li::before {
+  content: '»';
+  position: absolute;
+  left: 0;
+  color: var(--accent1);
+}
+.help-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px;
+}
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.71rem;
+  color: var(--text-muted);
+}
+.shortcut kbd {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--accent1);
+  font-family: inherit;
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  min-width: 74px;
+  text-align: center;
+}

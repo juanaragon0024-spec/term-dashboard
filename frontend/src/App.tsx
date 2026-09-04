@@ -6,11 +6,13 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { AppsPanel } from './components/AppsPanel'
 import { ToolsPanel } from './components/ToolsPanel'
 import { HelpPanel } from './components/HelpPanel'
+import { runCommand, type CommandContext, type PanelKey } from './commands'
 import { themes, type ThemeKey } from './themes'
 
 export interface Message {
   id: string
-  role: 'user' | 'assistant'
+  /** «system» son respuestas del propio Term, no de la IA. */
+  role: 'user' | 'assistant' | 'system'
   content: string
 }
 
@@ -35,7 +37,7 @@ function App() {
     { id: 'tab-1', name: 'Chat', model: 'claude', modelName: 'Claude', messages: [], isLoading: false },
   ])
   const [activeTabId, setActiveTabId] = useState('tab-1')
-  const [activePanel, setActivePanel] = useState<'chat' | 'settings' | 'apps' | 'tools' | 'help'>('chat')
+  const [activePanel, setActivePanel] = useState<PanelKey>('chat')
   const [theme, setTheme] = useState<ThemeKey>(() => (localStorage.getItem('term-theme') as ThemeKey) || 'neon')
   const [effort, setEffort] = useState<Effort>(() => (localStorage.getItem('term-effort') as Effort) || 'high')
   const [workdir, setWorkdir] = useState(() => localStorage.getItem('term-workdir') || '')
@@ -140,7 +142,70 @@ function App() {
     })
   }, [])
 
+  /** Añade una respuesta del propio Term a la conversación. */
+  const responder = useCallback((tabId: string, content: string) => {
+    setTabs((prev) => prev.map((t) =>
+      t.id === tabId
+        ? { ...t, messages: [...t.messages, { id: crypto.randomUUID(), role: 'system' as const, content }] }
+        : t))
+  }, [])
+
   const sendMessage = useCallback(async (text: string, tabId: string) => {
+    // Un «/algo» lo resuelve Term; solo lo demás llega a la IA.
+    if (text.trim().startsWith('/')) {
+      const tab = tabs.find((t) => t.id === tabId)
+      const ctx: CommandContext = {
+        addTab: (nombre) => addTab(nombre),
+        closeTab: () => closeTab(tabId),
+        clearTab: () => clearTab(tabId),
+        renameTab: (nombre) => renameTab(tabId, nombre),
+        setPanel: setActivePanel,
+        setTheme,
+        setEffort,
+        setModel: (m) => setTabs((prev) => prev.map((t) =>
+          t.id === tabId ? { ...t, model: m } : t)),
+        setWorkdir,
+        copyLast: async () => {
+          const ultima = [...(tab?.messages ?? [])].reverse()
+            .find((m) => m.role === 'assistant' && m.content)
+          if (!ultima) return false
+          try {
+            await navigator.clipboard.writeText(ultima.content)
+            return true
+          } catch {
+            return false
+          }
+        },
+        exportChat: () => {
+          const texto = (tab?.messages ?? [])
+            .map((m) => `## ${m.role === 'user' ? 'Usuario' : 'Term'}\n\n${m.content}`)
+            .join('\n\n')
+          const url = URL.createObjectURL(new Blob([texto], { type: 'text/markdown' }))
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `chat-${new Date().toISOString().slice(0, 10)}.md`
+          a.click()
+          URL.revokeObjectURL(url)
+        },
+        search: (aguja) => (tab?.messages ?? []).filter((m) =>
+          m.content.toLowerCase().includes(aguja.toLowerCase())).length,
+        notify: (aviso) => responder(tabId, aviso),
+        state: {
+          theme, effort, model: tab?.model ?? 'claude',
+          workdir, messages: tab?.messages.length ?? 0,
+        },
+      }
+      const resultado = runCommand(text, ctx)
+      if (resultado.handled) {
+        setTabs((prev) => prev.map((t) =>
+          t.id === tabId
+            ? { ...t, messages: [...t.messages, { id: crypto.randomUUID(), role: 'user' as const, content: text }] }
+            : t))
+        if (resultado.reply) responder(tabId, resultado.reply)
+        return
+      }
+    }
+
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text }
     const assistantId = crypto.randomUUID()
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '' }
@@ -234,7 +299,7 @@ function App() {
       delete abortRefs.current[tabId]
       setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t)))
     }
-  }, [workdir, effort, tabs])
+  }, [workdir, effort, tabs, theme, addTab, closeTab, clearTab, renameTab, responder])
 
   const stopGeneration = useCallback((tabId: string) => {
     abortRefs.current[tabId]?.abort()
@@ -247,7 +312,7 @@ function App() {
 
   return (
     <div className="app">
-      <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />
+      <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} tabs={tabs.length} />
       <div className="main-area">
         {/* Tab bar */}
         <div className="tab-bar">

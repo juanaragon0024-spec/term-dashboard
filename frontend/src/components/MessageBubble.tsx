@@ -77,8 +77,12 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
     )
   }
 
+  // Los avisos del propio Term se distinguen de lo que responde la IA: si no,
+  // parecería que el modelo contesta cosas que no ha dicho.
+  const clase = message.role === 'system' ? 'message system' : 'message assistant'
+
   return (
-    <div className="message assistant">
+    <div className={clase}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
