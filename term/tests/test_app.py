@@ -957,3 +957,132 @@ class TestGitHub:
         application, pilot = app
         await application._handle_command("/pr abc", application._active_tab_id())
         await pilot.pause()  # basta con que no reviente
+
+
+class TestPanelDeArchivos:
+    """El panel listaba las carpetas pero no se podía entrar en ninguna."""
+
+    @pytest.fixture
+    def con_archivos(self, tmp_path):
+        (tmp_path / "proyecto" / "src").mkdir(parents=True)
+        (tmp_path / "proyecto" / "src" / "main.py").write_text("x")
+        (tmp_path / "archivo.txt").write_text("y")
+        (tmp_path / ".oculto").write_text("z")
+        return tmp_path
+
+    async def _abrir(self, application, pilot, raiz):
+        """Dejar el panel visible: no se puede pinchar lo que no se ve."""
+        application._set_workdir(str(raiz))
+        panel = application.query_one("#file-panel")
+        if not panel.has_class("visible"):
+            application.action_toggle_files()
+        await pilot.pause()
+
+    async def test_lista_carpetas_y_archivos_sin_los_ocultos(self, app, con_archivos):
+        from textual.widgets import ListView
+
+        application, pilot = app
+        application._set_workdir(str(con_archivos))
+        await pilot.pause()
+        lista = application.query_one("#file-list", ListView)
+        nombres = [c.path.name for c in lista.children]
+        assert "proyecto" in nombres and "archivo.txt" in nombres
+        assert ".oculto" not in nombres
+
+    async def test_un_clic_entra_en_la_carpeta(self, app, con_archivos):
+        """Leer la ruta del texto pintado lanzaba AttributeError, y un
+        except lo tragaba: el clic no hacía nada."""
+        from textual.widgets import ListView
+
+        application, pilot = app
+        await self._abrir(application, pilot, con_archivos)
+        lista = application.query_one("#file-list", ListView)
+        carpeta = next(c for c in lista.children if c.path.name == "proyecto")
+
+        await pilot.click(carpeta)
+        await pilot.pause()
+        assert application.workdir == str(con_archivos / "proyecto")
+
+    async def test_enter_también_entra(self, app, con_archivos):
+        from textual.widgets import ListView
+
+        application, pilot = app
+        application._set_workdir(str(con_archivos))
+        await pilot.pause()
+        lista = application.query_one("#file-list", ListView)
+        lista.focus()
+        lista.index = next(i for i, c in enumerate(lista.children)
+                           if c.path.name == "proyecto")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert application.workdir == str(con_archivos / "proyecto")
+
+    async def test_la_primera_entrada_sube_un_nivel(self, app, con_archivos):
+        from textual.widgets import ListView
+
+        application, pilot = app
+        await self._abrir(application, pilot, con_archivos / "proyecto")
+        lista = application.query_one("#file-list", ListView)
+        await pilot.click(lista.children[0])
+        await pilot.pause()
+        assert application.workdir == str(con_archivos)
+
+    async def test_al_elegir_un_archivo_su_ruta_va_al_mensaje(self, app, con_archivos):
+        from textual.widgets import ListView
+
+        from term.app import ChatInput
+
+        application, pilot = app
+        await self._abrir(application, pilot, con_archivos)
+        lista = application.query_one("#file-list", ListView)
+        archivo = next(c for c in lista.children if c.path.name == "archivo.txt")
+
+        await pilot.click(archivo)
+        await pilot.pause()
+        entrada = application.query_one(
+            f"#input-{application._active_tab_id()}", ChatInput)
+        assert "archivo.txt" in entrada.text
+        # Y el directorio no cambia por pinchar un archivo.
+        assert application.workdir == str(con_archivos)
+
+    async def test_al_abrirlo_el_foco_va_a_la_lista(self, app, con_archivos):
+        """Sin foco, las flechas no sirven de nada."""
+        from textual.widgets import ListView
+
+        application, pilot = app
+        application._set_workdir(str(con_archivos))
+        if application._show_files:
+            application.action_toggle_files()
+            await pilot.pause()
+        application.action_toggle_files()
+        await pilot.pause()
+        assert application.focused is application.query_one("#file-list", ListView)
+
+    async def test_escape_devuelve_el_foco_al_chat(self, app, con_archivos):
+        from textual.widgets import ListView
+
+        from term.app import ChatInput
+
+        application, pilot = app
+        application._set_workdir(str(con_archivos))
+        await pilot.pause()
+        application.query_one("#file-list", ListView).focus()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(application.focused, ChatInput)
+
+    async def test_las_listas_de_otros_paneles_no_navegan_el_workdir(
+            self, app, con_archivos):
+        """El buscador y el panel de git tienen sus propias listas; sus
+        eventos burbujean hasta aquí si no se filtran."""
+        from term.app import FileFinder
+
+        application, pilot = app
+        application._set_workdir(str(con_archivos))
+        antes = application.workdir
+        application.action_find_file()
+        await pilot.pause()
+        assert isinstance(application.screen, FileFinder)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert application.workdir == antes

@@ -149,6 +149,20 @@ def _fmt_size(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+class FileItem(ListItem):
+    """Una entrada del panel de archivos.
+
+    Guarda su ruta en lugar de dejar que se deduzca del texto pintado: leer la
+    etiqueta para saber a dónde ir es frágil y además obliga a inventarse
+    prefijos como «[dir] » que luego hay que volver a quitar.
+    """
+
+    def __init__(self, path: Path, is_dir: bool, label: str) -> None:
+        super().__init__(Label(label))
+        self.path = path
+        self.is_dir = is_dir
+
+
 class UserMessage(Static):
     """Un mensaje escrito por el usuario."""
 
@@ -853,7 +867,7 @@ class TermApp(App):
         workpath = Path(wd)
         if not workpath.is_dir():
             return
-        lv.append(ListItem(Label("[dir] ..")))
+        lv.append(FileItem(workpath.parent, True, "  ..", ))
         try:
             entries = sorted(
                 workpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
@@ -863,32 +877,34 @@ class TermApp(App):
         for entry in entries:
             if entry.name.startswith("."):
                 continue
-            label = f"[dir] {entry.name}" if entry.is_dir() else entry.name
-            lv.append(ListItem(Label(label)))
+            es_carpeta = entry.is_dir()
+            icono = "▸" if es_carpeta else " "
+            lv.append(FileItem(entry, es_carpeta,
+                               f"{icono} {escape(entry.name)}"))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        try:
-            text = str(event.item.query_one(Label).renderable)
-        except Exception:
+        """Entrar en una carpeta, o meter un archivo en el mensaje."""
+        # Las listas del buscador y del panel de git tienen sus propios
+        # manejadores; sin este filtro, sus eventos llegarían aquí al burbujear.
+        if not isinstance(event.item, FileItem):
             return
-        if text == "[dir] ..":
-            self._set_workdir(str(Path(self.workdir).parent))
+        event.stop()
+        self._abrir_entrada(event.item)
+
+    def _abrir_entrada(self, item: FileItem) -> None:
+        if item.is_dir:
+            if item.path.is_dir():
+                self._set_workdir(str(item.path))
             return
-        if text.startswith("[dir] "):
-            target = Path(self.workdir) / text[6:]
-            if target.is_dir():
-                self._set_workdir(str(target))
-            return
-        # Un archivo se anade a la entrada activa para poder referirlo.
         chat = self._active_chat()
         if chat is None:
             return
-        path = str(Path(self.workdir) / text)
         try:
             inp = self.query_one(f"#input-{chat.tab_id}", ChatInput)
         except NoMatches:
             return
-        inp.text = f"{inp.text} {path}".strip() if inp.text else path
+        ruta = str(item.path)
+        inp.text = f"{inp.text} {ruta}".strip() if inp.text else ruta
         inp.move_cursor(inp.document.end)
         inp.focus()
 
@@ -1075,6 +1091,12 @@ class TermApp(App):
         self.push_screen(GitPanel(self.workdir, al_confirmar))
 
     def action_toggle_files(self) -> None:
+        """Mostrar u ocultar el panel de archivos.
+
+        Al abrirlo el foco va a la lista, que es lo que hace que las flechas
+        sirvan para algo; al cerrarlo vuelve al chat para poder seguir
+        escribiendo sin tocar el ratón.
+        """
         try:
             panel = self.query_one("#file-panel")
         except NoMatches:
@@ -1083,6 +1105,12 @@ class TermApp(App):
         self._show_files = panel.has_class("visible")
         if self._show_files:
             self._refresh_file_panel()
+            with contextlib.suppress(NoMatches):
+                self.query_one("#file-list", ListView).focus()
+        else:
+            tab = self._active_tab_id()
+            if tab:
+                self._focus_input(tab)
         self._persist()
 
     def action_cycle_effort(self) -> None:
@@ -1123,10 +1151,16 @@ class TermApp(App):
         await self._mcp.stop_all()
 
     async def action_cancel(self) -> None:
-        """Esc cancela la generacion, o cierra el panel si no hay nada corriendo."""
+        """Esc cierra lo que esté abierto, o cancela la generación."""
         panel = self._active_panel_name()
         if panel:
             await self._close_panel(panel)
+            return
+        # Con el foco en el panel de archivos, Esc devuelve el foco al chat.
+        if isinstance(self.focused, ListView) and self.focused.id == "file-list":
+            tab = self._active_tab_id()
+            if tab:
+                self._focus_input(tab)
             return
         chat = self._active_chat()
         if chat is None or not chat.is_loading:

@@ -280,6 +280,14 @@ Footer {
 #file-panel ListItem:hover {
     background: $bg3;
 }
+#file-panel ListView:focus {
+    border-left: outer $accent1;
+}
+#file-panel ListItem.--highlight {
+    background: $bg3;
+    color: $accent1;
+    text-style: bold;
+}
 #chat-col {
     width: 1fr;
 }
