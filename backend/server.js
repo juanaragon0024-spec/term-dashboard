@@ -32,18 +32,26 @@ const ROOT = path.resolve(process.env.TERM_ROOT || os.homedir());
 const UI_DIR = path.resolve(__dirname, '..', 'frontend', 'dist');
 const UI_BUILT = fs.existsSync(path.join(UI_DIR, 'index.html'));
 
-// En desarrollo la interfaz la sirve Vite en otro puerto, y solo entonces
-// hace falta permitir ese origen. Sin esto, cualquier página abierta en el
+// Orígenes permitidos. Sin esta lista, cualquier página abierta en el
 // navegador podría llamar a esta API con las credenciales del usuario.
-const DEV_ORIGINS = new Set([
+//
+// El propio servidor tiene que estar dentro: el navegador manda cabecera
+// Origin también para las peticiones del mismo origen cuando cargan módulos
+// ES, y dejarlo fuera hacía que la interfaz no llegara a arrancar.
+const ALLOWED_ORIGINS = new Set([
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  // En desarrollo la interfaz la sirve Vite en otro puerto.
   'http://localhost:5173', 'http://127.0.0.1:5173',
   'http://localhost:4173', 'http://127.0.0.1:4173',
 ]);
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || DEV_ORIGINS.has(origin)) return callback(null, true);
-    return callback(new Error('origen no permitido'));
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+    // Un origen ajeno se rechaza sin CORS, pero sin tumbar la petición con
+    // un 500: se responde igual y el navegador la bloquea, que es lo suyo.
+    return callback(null, false);
   },
 }));
 app.use(express.json({ limit: '1mb' }));

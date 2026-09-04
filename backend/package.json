@@ -7,7 +7,8 @@
     "start": "npm run build:ui && node server.js",
     "build:ui": "cd ../frontend && npm install --silent && npm run build",
     "serve": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test test/"
   },
   "keywords": [],
   "author": "",
