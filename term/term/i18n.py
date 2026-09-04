@@ -1427,3 +1427,98 @@ _ABOUT_EXTRA: dict[str, dict[str, str]] = {
 for _key, _by_lang in _ABOUT_EXTRA.items():
     for _code in LANGUAGES:
         TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+_GIT_EXTRA: dict[str, dict[str, str]] = {
+    "grp_git": {
+        "es": "Git", "en": "Git", "pt": "Git", "fr": "Git", "de": "Git",
+        "it": "Git", "zh": "Git", "ja": "Git", "ko": "Git", "ar": "Git",
+    },
+    "no_repo": {
+        "es": "Aquí no hay ningún repositorio git",
+        "en": "There is no git repository here",
+        "pt": "Aqui não há nenhum repositório git",
+        "fr": "Il n'y a pas de dépôt git ici",
+        "de": "Hier gibt es kein Git-Repository",
+        "it": "Qui non c'è nessun repository git",
+        "zh": "这里没有 git 仓库",
+        "ja": "ここに git リポジトリはありません",
+        "ko": "여기에는 git 저장소가 없습니다",
+        "ar": "لا يوجد مستودع git هنا",
+    },
+    "context_empty": {
+        "es": "No hay archivos en el contexto. Añádelos con /add <ruta>",
+        "en": "No files in context. Add them with /add <path>",
+        "pt": "Sem ficheiros no contexto. Adiciona-os com /add <caminho>",
+        "fr": "Aucun fichier dans le contexte. Ajoutez-en avec /add <chemin>",
+        "de": "Keine Dateien im Kontext. Füge welche hinzu mit /add <Pfad>",
+        "it": "Nessun file nel contesto. Aggiungili con /add <percorso>",
+        "zh": "上下文里没有文件。用 /add <路径> 添加。",
+        "ja": "コンテキストにファイルがありません。/add <パス> で追加します。",
+        "ko": "컨텍스트에 파일이 없습니다. /add <경로>로 추가하세요.",
+        "ar": "لا ملفات في السياق. أضفها بـ /add <المسار>",
+    },
+    "context_title": {
+        "es": "Archivos en el contexto", "en": "Files in context",
+        "pt": "Ficheiros no contexto", "fr": "Fichiers dans le contexte",
+        "de": "Dateien im Kontext", "it": "File nel contesto",
+        "zh": "上下文中的文件", "ja": "コンテキストのファイル",
+        "ko": "컨텍스트의 파일", "ar": "الملفات في السياق",
+    },
+    "context_added": {
+        "es": "Añadido al contexto: {name}", "en": "Added to context: {name}",
+        "pt": "Adicionado ao contexto: {name}", "fr": "Ajouté au contexte : {name}",
+        "de": "Zum Kontext hinzugefügt: {name}", "it": "Aggiunto al contesto: {name}",
+        "zh": "已加入上下文：{name}", "ja": "コンテキストに追加: {name}",
+        "ko": "컨텍스트에 추가: {name}", "ar": "أُضيف إلى السياق: {name}",
+    },
+    "context_dropped": {
+        "es": "Sacado del contexto: {name}", "en": "Removed from context: {name}",
+        "pt": "Removido do contexto: {name}", "fr": "Retiré du contexte : {name}",
+        "de": "Aus dem Kontext entfernt: {name}", "it": "Rimosso dal contesto: {name}",
+        "zh": "已移出上下文：{name}", "ja": "コンテキストから削除: {name}",
+        "ko": "컨텍스트에서 제거: {name}", "ar": "أُزيل من السياق: {name}",
+    },
+    "compact_done": {
+        "es": "Conversación resumida: {before} → {after} mensajes",
+        "en": "Conversation compacted: {before} → {after} messages",
+        "pt": "Conversa resumida: {before} → {after} mensagens",
+        "fr": "Conversation résumée : {before} → {after} messages",
+        "de": "Unterhaltung zusammengefasst: {before} → {after} Nachrichten",
+        "it": "Conversazione riassunta: {before} → {after} messaggi",
+        "zh": "对话已压缩：{before} → {after} 条消息",
+        "ja": "会話を要約しました: {before} → {after} 件",
+        "ko": "대화를 요약했습니다: {before} → {after}개",
+        "ar": "تم تلخيص المحادثة: {before} ← {after} رسالة",
+    },
+    "compact_not_needed": {
+        "es": "La conversación es corta; no hace falta resumirla todavía",
+        "en": "The conversation is short; no need to compact it yet",
+        "pt": "A conversa é curta; ainda não é preciso resumi-la",
+        "fr": "La conversation est courte ; pas besoin de la résumer",
+        "de": "Die Unterhaltung ist kurz; noch kein Zusammenfassen nötig",
+        "it": "La conversazione è breve; non serve ancora riassumerla",
+        "zh": "对话还很短，暂时不需要压缩",
+        "ja": "会話はまだ短いので、要約は不要です",
+        "ko": "대화가 짧아 아직 요약할 필요가 없습니다",
+        "ar": "المحادثة قصيرة؛ لا حاجة لتلخيصها بعد",
+    },
+    "allow_profiles": {
+        "es": "Perfiles: {profiles}", "en": "Profiles: {profiles}",
+        "pt": "Perfis: {profiles}", "fr": "Profils : {profiles}",
+        "de": "Profile: {profiles}", "it": "Profili: {profiles}",
+        "zh": "配置：{profiles}", "ja": "プロファイル: {profiles}",
+        "ko": "프로필: {profiles}", "ar": "الأوضاع: {profiles}",
+    },
+    "allow_set": {
+        "es": "La IA puede usar: {tools}", "en": "The AI may use: {tools}",
+        "pt": "A IA pode usar: {tools}", "fr": "L'IA peut utiliser : {tools}",
+        "de": "Die KI darf nutzen: {tools}", "it": "L'IA può usare: {tools}",
+        "zh": "AI 可以使用：{tools}", "ja": "AI が使えるもの: {tools}",
+        "ko": "AI가 사용할 수 있는 것: {tools}", "ar": "يمكن للذكاء استخدام: {tools}",
+    },
+}
+
+for _key, _by_lang in _GIT_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])

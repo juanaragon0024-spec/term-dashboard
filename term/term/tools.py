@@ -42,6 +42,23 @@ class ToolContext:
     # Sin permisos concedidos, las herramientas que tocan el sistema no se le
     # llegan a ofrecer al modelo.
     allow_system: bool = True
+    # Lista blanca por nombre de herramienta. Vacia significa "todas las que
+    # permita allow_system"; con contenido, solo esas. Es lo que permite dejar
+    # que lea y busque pero no que ejecute comandos.
+    allowed: frozenset[str] = frozenset()
+    denied: frozenset[str] = frozenset()
+
+    def permits(self, tool: Tool) -> tuple[bool, str]:
+        """Si una herramienta se puede usar aqui, y por que no."""
+        if tool.name in self.denied:
+            return False, f"«{tool.name}» está en la lista de denegadas."
+        if self.allowed and tool.name not in self.allowed:
+            return False, (f"«{tool.name}» no está en la lista de permitidas "
+                           f"({', '.join(sorted(self.allowed))}).")
+        if tool.system and not self.allow_system:
+            return False, ("El usuario no ha concedido permisos de sistema, "
+                           "así que esta herramienta no está disponible.")
+        return True, ""
 
 
 @dataclass
@@ -278,10 +295,10 @@ TOOLS: dict[str, Tool] = {t.name: t for t in _LISTA}
 def available_tools(ctx: ToolContext) -> list[Tool]:
     """Herramientas que se le ofrecen al modelo en este contexto.
 
-    Sin permisos de sistema, las que tocan el sistema ni se mencionan: es mas
-    honesto que ofrecerlas y negarlas despues.
+    Lo que no se puede usar ni se menciona: es mas honesto que ofrecerlo y
+    negarlo despues.
     """
-    return [t for t in TOOLS.values() if ctx.allow_system or not t.system]
+    return [t for t in TOOLS.values() if ctx.permits(t)[0]]
 
 
 def execute(name: str, args: dict, ctx: ToolContext) -> tuple[bool, str]:
@@ -289,9 +306,9 @@ def execute(name: str, args: dict, ctx: ToolContext) -> tuple[bool, str]:
     tool = TOOLS.get(name)
     if tool is None:
         return False, f"No existe la herramienta «{name}»."
-    if tool.system and not ctx.allow_system:
-        return False, ("El usuario no ha concedido permisos de sistema, "
-                       "así que esta herramienta no está disponible.")
+    permitida, motivo = ctx.permits(tool)
+    if not permitida:
+        return False, motivo
     if tool.handler is None:
         return False, f"La herramienta «{name}» no está implementada."
 

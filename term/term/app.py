@@ -34,6 +34,7 @@ from textual.widgets import (
 from . import config as cfg_mod
 from . import keys as keystore
 from . import syscontrol as sysctl
+from . import vcs
 from .commands import (
     COMMAND_GROUPS,
     COMMANDS_HELP,
@@ -50,6 +51,7 @@ from .models import (
     model_label,
     normalise_ref,
 )
+from .project import FileContext, project_summary
 from .providers import get_provider, split_ref
 from .session import ChatSession, claude_available
 from .store import SessionStore
@@ -68,6 +70,23 @@ _ATTACH_LIMIT = 40_000
 
 _PANELS = ("help", "apps", "tools", "settings")
 
+# Perfiles de permisos. Es lo que antes era un todo-o-nada: ahora se puede
+# dejar que lea y busque sin dejar que ejecute comandos.
+_SOLO_LECTURA = frozenset({
+    "leer_archivo", "listar_carpeta", "buscar_archivos", "buscar_texto",
+})
+_SEGURO = _SOLO_LECTURA | frozenset({
+    "crear_carpeta", "crear_archivo", "controlar_musica", "buscar_en_web",
+    "info_sistema", "ajustar_volumen",
+})
+PERMISSION_PROFILES: dict[str, frozenset[str] | None] = {
+    # None significa "todas las que el permiso general deje pasar".
+    "todo": None,
+    "segura": _SEGURO,
+    "lectura": _SOLO_LECTURA,
+    "nada": frozenset(),
+}
+
 
 def _human_size(num: int) -> str:
     for unit in ("B", "KB", "MB"):
@@ -75,6 +94,38 @@ def _human_size(num: int) -> str:
             return f"{num:.0f} {unit}" if unit == "B" else f"{num / 1:.1f} {unit}"
         num //= 1024
     return f"{num} B"
+
+
+def _summarise_history(mensajes: list[dict]) -> str:
+    """Resumen de una tanda de mensajes, hecho en local.
+
+    No se le pide al modelo a proposito: compactar existe justamente para
+    gastar menos, y una llamada extra iria en contra. Se queda con lo que el
+    usuario pidio y con las herramientas que se usaron, que es lo que hace
+    falta para seguir el hilo.
+    """
+    peticiones: list[str] = []
+    herramientas: list[str] = []
+    for mensaje in mensajes:
+        rol = mensaje.get("role")
+        contenido = mensaje.get("content")
+        if rol == "user" and isinstance(contenido, str):
+            plano = " ".join(contenido.split())
+            if plano and not plano.startswith("Resumen de lo hablado"):
+                peticiones.append(plano[:160])
+        elif rol == "assistant":
+            for llamada in mensaje.get("tool_calls") or []:
+                nombre = (llamada.get("function") or {}).get("name")
+                if nombre and nombre not in herramientas:
+                    herramientas.append(nombre)
+
+    partes = []
+    if peticiones:
+        partes.append("Lo que se pidió:\n" + "\n".join(
+            f"- {p}" for p in peticiones[-12:]))
+    if herramientas:
+        partes.append("Herramientas usadas: " + ", ".join(herramientas))
+    return "\n\n".join(partes) or "(sin nada reseñable)"
 
 
 def _fmt_size(path: Path) -> str:
@@ -253,6 +304,9 @@ class ChatTab(Vertical):
         self.history: list[str] = []
         self.history_pos = 0
         self.attachments: list[tuple[str, str]] = []
+        # Archivos que el usuario ha metido a proposito en la conversacion.
+        # A diferencia de los adjuntos, siguen ahi en los turnos siguientes.
+        self.context = FileContext()
         self.title = ""
 
     @property
@@ -322,6 +376,7 @@ class TermApp(App):
         self._pending_tab_name: str | None = None
         self._pending_url: str = ""
         self._git_branch = ""
+        self._tool_profile: str = cfg["tool_profile"]
         super().__init__()
         self.workdir = workdir or cfg["workdir"]
         self.theme_key = theme or cfg["theme"]
@@ -522,6 +577,7 @@ class TermApp(App):
             "default_browser": self._default_browser,
             "permission_mode": self._permission_mode,
             "show_file_panel": self._show_files,
+            "tool_profile": self._tool_profile,
         })
         cfg_mod.save_config(self._cfg)
 
@@ -572,6 +628,8 @@ class TermApp(App):
         parts = [self._t("multiline_hint")]
         if chat.attachments:
             parts.append(self._t("attach_pending", count=len(chat.attachments)))
+        if resumen := chat.context.summary():
+            parts.append(f"contexto: {resumen}")
         with contextlib.suppress(NoMatches):
             self.query_one(f"#hint-{chat.tab_id}", Label).update(
                 "[dim]" + "  ·  ".join(parts) + "[/]"
@@ -978,6 +1036,21 @@ class TermApp(App):
         self._set_loading(chat.tab_id, self._t("processing"))
         self._run_ai(chat, prompt)
 
+    def _system_prompt(self, chat: ChatTab) -> str:
+        """Prompt de sistema del turno, con lo que Term sabe del proyecto.
+
+        Las instrucciones del repositorio y el mapa del proyecto se leen en
+        cada turno: si se cachearan, un AGENTS.md recién editado no se vería
+        hasta reiniciar.
+        """
+        partes = [build_system_context(self._lang, macos=sysctl.IS_MACOS)]
+        if resumen := project_summary(chat.workdir or self.workdir):
+            partes.append(resumen)
+        if archivos := chat.context.render():
+            partes.append(
+                "Archivos que el usuario ha puesto en el contexto:\n\n" + archivos)
+        return "\n\n".join(partes)
+
     def _set_loading(self, tab_id: str, text: str) -> None:
         try:
             label = self.query_one(f"#load-{tab_id}", Label)
@@ -1001,9 +1074,10 @@ class TermApp(App):
                 prompt,
                 effort=self.effort,
                 workdir=chat.workdir or self.workdir,
-                system_prompt=build_system_context(self._lang, macos=sysctl.IS_MACOS),
+                system_prompt=self._system_prompt(chat),
                 permission_mode=self._permission_mode,
                 restricted=not self._permissions_granted,
+                allowed_tools=PERMISSION_PROFILES[self._tool_profile],
             )
             async for event in stream:
                 if event.kind == "text" and assistant is not None:
@@ -1263,6 +1337,39 @@ class TermApp(App):
         elif cmd == "/attach":
             self._cmd_attach(arg, chat)
 
+        elif cmd == "/status":
+            await self._cmd_git(vcs.status, tab_id)
+
+        elif cmd == "/diff":
+            await self._cmd_git(vcs.diff, tab_id)
+
+        elif cmd == "/gitlog":
+            await self._cmd_git(vcs.log, tab_id)
+
+        elif cmd == "/commit":
+            await self._cmd_commit(arg, tab_id)
+
+        elif cmd == "/undo":
+            await self._cmd_git(vcs.undo, tab_id)
+
+        elif cmd == "/add":
+            await self._cmd_add(arg, tab_id)
+
+        elif cmd == "/drop":
+            self._cmd_drop(arg, chat)
+
+        elif cmd == "/context":
+            await self._cmd_context(tab_id)
+
+        elif cmd == "/map":
+            await self._cmd_map(tab_id)
+
+        elif cmd == "/allow":
+            self._cmd_allow(arg)
+
+        elif cmd == "/compact":
+            await self._cmd_compact(tab_id)
+
         elif cmd == "/mkdir":
             await self._cmd_mkdir(arg, tab_id)
 
@@ -1341,7 +1448,7 @@ class TermApp(App):
                 self._notify_sys_failure(result)
 
         # -- meta -----------------------------------------------------------
-        elif cmd == "/status":
+        elif cmd == "/tab":
             usage = chat.session.usage if chat else None
             self.notify(
                 f"{self._t('model_label')}: {model_label(chat.model_ref if chat else self.current_model)} | "
@@ -1746,6 +1853,145 @@ class TermApp(App):
             self.notify(self._t("opening", name=arg), timeout=2)
         else:
             self._notify_sys_failure(result)
+
+    async def _cmd_git(self, funcion, tab_id: str) -> None:
+        """Ejecutar una orden de git y pintar su salida."""
+        result = funcion(self.workdir)
+        if not result:
+            self.notify(result.reason or self._t("no_repo"), timeout=4)
+            return
+        self._refresh_git()
+        self._refresh_status()
+        await self._post_info(tab_id, result.output, listing=True)
+
+    async def _cmd_commit(self, arg: str, tab_id: str) -> None:
+        """Guardar los cambios. Sin mensaje, se lo pide a la IA de la pestaña."""
+        if not vcs.is_repo(self.workdir):
+            self.notify(self._t("no_repo"), timeout=3)
+            return
+        if arg.strip():
+            result = vcs.commit(self.workdir, arg.strip())
+            if result:
+                self._refresh_git()
+                self._refresh_status()
+                await self._post_info(tab_id, result.output, listing=True)
+            else:
+                self.notify(result.reason, timeout=4)
+            return
+
+        cambios = vcs.diff(self.workdir)
+        if not cambios or cambios.output == "(no hay cambios)":
+            self.notify(cambios.reason or "no hay nada que guardar", timeout=3)
+            return
+        chat = self._tabs.get(tab_id)
+        if chat is None:
+            return
+        # El mensaje lo redacta la IA, pero el commit lo confirma el usuario:
+        # Term no escribe en el repositorio por su cuenta.
+        await self._send_message(chat, (
+            "Escribe un mensaje de commit para estos cambios. Responde solo con "
+            "el mensaje, sin comillas ni explicación; yo lo confirmo luego con "
+            "/commit <mensaje>.\n\n"
+            f"```diff\n{cambios.output[:8000]}\n```"
+        ))
+
+    async def _cmd_add(self, arg: str, tab_id: str) -> None:
+        chat = self._tabs.get(tab_id)
+        if chat is None or not arg:
+            self.notify("Uso: /add <ruta>", timeout=2)
+            return
+        anadidos, fallos = [], []
+        for pieza in arg.split():
+            ok, detalle = chat.context.add(pieza, self.workdir)
+            (anadidos if ok else fallos).append(detalle)
+        if anadidos:
+            self._refresh_hint()
+            self.notify(self._t("context_added",
+                                name=", ".join(Path(a).name for a in anadidos)),
+                        timeout=2)
+        for fallo in fallos:
+            self.notify(fallo, timeout=3)
+
+    def _cmd_drop(self, arg: str, chat: ChatTab | None) -> None:
+        if chat is None:
+            return
+        if not arg.strip():
+            cuantos = chat.context.clear()
+            self._refresh_hint()
+            self.notify(self._t("context_dropped", name=f"{cuantos} archivo(s)"),
+                        timeout=2)
+            return
+        ok, nombre = chat.context.drop(arg.strip())
+        self._refresh_hint()
+        self.notify(
+            self._t("context_dropped", name=Path(nombre).name) if ok
+            else f"no estaba en el contexto: {arg}", timeout=2)
+
+    async def _cmd_context(self, tab_id: str) -> None:
+        chat = self._tabs.get(tab_id)
+        if chat is None or not chat.context.paths:
+            await self._post_info(tab_id, self._t("context_empty"), listing=True)
+            return
+        lineas = [f"[bold]{self._t('context_title')}[/]\n"]
+        for ruta in chat.context.paths:
+            path = Path(ruta)
+            tamano = _fmt_size(path) if path.is_file() else "?"
+            lineas.append(f"  {ruta}  [dim]{tamano}[/]")
+        lineas.append("\n[dim]/drop <nombre> para sacar uno · /drop para vaciar[/]")
+        await self._post_info(tab_id, "\n".join(lineas), listing=True)
+
+    async def _cmd_map(self, tab_id: str) -> None:
+        from .project import build_repo_map
+
+        mapa = build_repo_map(self.workdir)
+        await self._post_info(tab_id, mapa or "(proyecto vacío)", listing=True)
+
+    def _cmd_allow(self, arg: str) -> None:
+        """Elegir qué herramientas puede usar la IA."""
+        perfil = arg.strip().lower()
+        if perfil not in PERMISSION_PROFILES:
+            self.notify(
+                self._t("allow_profiles", profiles=", ".join(PERMISSION_PROFILES)),
+                timeout=5)
+            return
+        self._tool_profile = perfil
+        self._persist()
+        permitidas = PERMISSION_PROFILES[perfil]
+        self.notify(
+            self._t("allow_set",
+                    tools="todas" if permitidas is None
+                    else (", ".join(sorted(permitidas)) or "ninguna")),
+            timeout=4)
+
+    async def _cmd_compact(self, tab_id: str) -> None:
+        """Resumir la conversación para liberar contexto.
+
+        En una pestaña conectada por API sustituye los mensajes viejos por un
+        resumen y deja los últimos intactos. Con una CLI el historial lo lleva
+        ella, así que no hay nada que compactar desde aquí.
+        """
+        chat = self._tabs.get(tab_id)
+        if chat is None:
+            return
+        historial = chat.session.history
+        if not chat.session.is_api or len(historial) < 8:
+            self.notify(self._t("compact_not_needed"), timeout=4)
+            return
+
+        antes = len(historial)
+        conservar = 4
+        viejos, recientes = historial[:-conservar], historial[-conservar:]
+        historial[:] = [
+            {"role": "user", "content":
+             "Resumen de lo hablado antes en esta conversación:\n"
+             + _summarise_history(viejos)},
+            {"role": "assistant", "content": "Entendido, sigo con eso en mente."},
+            *recientes,
+        ]
+        self._refresh_status()
+        await self._post_info(
+            tab_id, self._t("compact_done", before=antes, after=len(historial)),
+            listing=True)
 
     async def _cmd_mkdir(self, arg: str, tab_id: str) -> None:
         if not arg:

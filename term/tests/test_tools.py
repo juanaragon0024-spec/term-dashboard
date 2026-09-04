@@ -140,3 +140,39 @@ class TestEsquemas:
         anthropic = {e["name"] for e in schemas_anthropic(ctx)}
         gemini = {f["name"] for f in schemas_gemini(ctx)[0]["function_declarations"]}
         assert openai == anthropic == gemini
+
+
+class TestPermisosPorHerramienta:
+    """Antes era todo o nada: o la IA lo podía todo, o no podía nada."""
+
+    def test_lista_blanca(self, tmp_path):
+        ctx = ToolContext(workdir=str(tmp_path),
+                          allowed=frozenset({"leer_archivo", "listar_carpeta"}))
+        assert {t.name for t in available_tools(ctx)} == {"leer_archivo",
+                                                          "listar_carpeta"}
+        ok, motivo = execute("crear_carpeta", {"path": "x"}, ctx)
+        assert not ok and "no está en la lista de permitidas" in motivo
+
+    def test_lista_negra(self, tmp_path):
+        ctx = ToolContext(workdir=str(tmp_path),
+                          denied=frozenset({"ejecutar_shell"}))
+        nombres = {t.name for t in available_tools(ctx)}
+        assert "ejecutar_shell" not in nombres
+        assert "leer_archivo" in nombres
+        ok, motivo = execute("ejecutar_shell", {"command": "ls"}, ctx)
+        assert not ok and "denegadas" in motivo
+
+    def test_la_lista_negra_pesa_mas_que_la_blanca(self, tmp_path):
+        ctx = ToolContext(workdir=str(tmp_path),
+                          allowed=frozenset({"ejecutar_shell"}),
+                          denied=frozenset({"ejecutar_shell"}))
+        assert not execute("ejecutar_shell", {"command": "ls"}, ctx)[0]
+
+    def test_sin_listas_se_permite_todo(self, tmp_path):
+        ctx = ToolContext(workdir=str(tmp_path))
+        assert len(available_tools(ctx)) == len(TOOLS)
+
+    def test_lista_blanca_vacia_no_es_lo_mismo_que_nada_permitido(self, tmp_path):
+        """Vacía significa «sin restricción»; para no permitir nada se usa
+        un perfil que deniegue explícitamente."""
+        assert len(available_tools(ToolContext(allowed=frozenset()))) == len(TOOLS)

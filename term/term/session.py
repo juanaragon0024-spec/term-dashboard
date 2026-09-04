@@ -164,6 +164,7 @@ class ChatSession:
         system_prompt: str = "",
         restricted: bool = False,
         permission_mode: str = "",
+        allowed_tools: object = None,
         max_turns: int = 15,
     ) -> list[str]:
         """Argumentos del turno. Aparte de `run` para poder comprobarlos
@@ -196,9 +197,11 @@ class ChatSession:
     async def _run_api(self, prompt: str, **kwargs: object) -> AsyncIterator[StreamEvent]:
         """Turno contra una API, con Term ejecutando las herramientas."""
         provider = self.provider
+        permitidas = kwargs.get("allowed_tools")
         ctx = toolkit.ToolContext(
             workdir=str(kwargs.get("workdir") or ""),
             allow_system=not bool(kwargs.get("restricted")),
+            allowed=frozenset(permitidas) if permitidas is not None else frozenset(),
         )
         self.history.append(provider_user_turn(provider, prompt))
         self.started = True

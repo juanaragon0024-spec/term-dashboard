@@ -621,3 +621,83 @@ class TestAyuda:
         await pilot.pause()
         # Basta con que no reviente al pintar un comando con corchetes.
         assert application.query_one(f"#cmdsug-{chat.tab_id}").has_class("visible")
+
+
+class TestProyectoYGit:
+    async def test_el_prompt_lleva_las_instrucciones_del_repo(self, app, tmp_path):
+        """Un AGENTS.md que nadie lee es un AGENTS.md que no sirve."""
+        application, pilot = app
+        (tmp_path / "AGENTS.md").write_text("Escribe los comentarios en español.")
+        application._set_workdir(str(tmp_path))
+        await pilot.pause()
+        prompt = application._system_prompt(application._active_chat())
+        assert "comentarios en español" in prompt.lower()
+
+    async def test_el_prompt_lleva_el_mapa_del_proyecto(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "modulo.py").write_text("x")
+        application._set_workdir(str(tmp_path))
+        await pilot.pause()
+        assert "modulo.py" in application._system_prompt(application._active_chat())
+
+    async def test_add_mete_el_archivo_en_el_prompt(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "clave.py").write_text("SECRETO_DEL_TEST = 1")
+        application._set_workdir(str(tmp_path))
+        await application._handle_command("/add clave.py",
+                                          application._active_tab_id())
+        await pilot.pause()
+        prompt = application._system_prompt(application._active_chat())
+        assert "SECRETO_DEL_TEST" in prompt
+
+    async def test_drop_lo_saca(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "clave.py").write_text("SECRETO_DEL_TEST = 1")
+        application._set_workdir(str(tmp_path))
+        tab = application._active_tab_id()
+        await application._handle_command("/add clave.py", tab)
+        await application._handle_command("/drop clave.py", tab)
+        await pilot.pause()
+        assert "SECRETO_DEL_TEST" not in application._system_prompt(
+            application._active_chat())
+
+    async def test_el_contexto_es_de_cada_pestana(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "solo-aqui.py").write_text("x")
+        application._set_workdir(str(tmp_path))
+        primera = application._active_tab_id()
+        await application._handle_command("/add solo-aqui.py", primera)
+        await application.action_new_tab()
+        await pilot.pause()
+        assert application._active_chat().context.paths == []
+
+    async def test_git_fuera_de_un_repo_avisa(self, app, tmp_path):
+        application, pilot = app
+        application._set_workdir(str(tmp_path))
+        await application._handle_command("/status", application._active_tab_id())
+        await pilot.pause()  # basta con que no reviente
+
+    async def test_allow_cambia_el_perfil_y_se_guarda(self, app):
+        application, pilot = app
+        await application._handle_command("/allow lectura",
+                                          application._active_tab_id())
+        await pilot.pause()
+        assert application._tool_profile == "lectura"
+        assert load_config()["tool_profile"] == "lectura"
+
+    async def test_allow_rechaza_un_perfil_inventado(self, app):
+        application, pilot = app
+        antes = application._tool_profile
+        await application._handle_command("/allow loquesea",
+                                          application._active_tab_id())
+        await pilot.pause()
+        assert application._tool_profile == antes
+
+    async def test_los_perfiles_nombran_herramientas_que_existen(self, app):
+        from term.app import PERMISSION_PROFILES
+        from term.tools import TOOLS
+
+        for nombre, permitidas in PERMISSION_PROFILES.items():
+            if permitidas is None:
+                continue
+            assert permitidas <= set(TOOLS), f"perfil {nombre} nombra algo que no existe"

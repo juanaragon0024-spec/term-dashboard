@@ -39,6 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "default_browser": "",
     "permission_mode": "default",
     "show_file_panel": False,
+    "tool_profile": "todo",
 }
 
 
