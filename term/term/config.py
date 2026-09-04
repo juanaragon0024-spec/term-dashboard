@@ -34,12 +34,12 @@ DEFAULTS: dict[str, Any] = {
     "workdir": str(Path.home()),
     "effort": "high",
     "model": "default",
-    "permissions_granted": False,
     "lang": "es",
     "default_browser": "",
-    "permission_mode": "default",
     "show_file_panel": False,
-    "tool_profile": "todo",
+    # Qué puede hacer la IA: lectura, normal o todo. Antes esto vivía en tres
+    # ajustes que no se hablaban entre ellos.
+    "permission_level": "",
     "code_skeleton": False,
 }
 

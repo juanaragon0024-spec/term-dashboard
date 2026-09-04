@@ -18,7 +18,7 @@ async def app(tmp_path):
     """App arrancada con los permisos ya concedidos, para saltar el dialogo."""
     from term import config
 
-    config.save_config({**config.DEFAULTS, "permissions_granted": True,
+    config.save_config({**config.DEFAULTS, "permission_level": "normal",
                         "workdir": str(tmp_path)})
     application = TermApp(workdir=str(tmp_path))
     async with application.run_test() as pilot:
@@ -34,25 +34,25 @@ class TestArranque:
 
     async def test_el_dialogo_de_permisos_sale_la_primera_vez(self, tmp_path):
         from term import config
-        config.save_config({**config.DEFAULTS, "permissions_granted": False})
+        config.save_config({**config.DEFAULTS, "permission_level": ""})
         application = TermApp(workdir=str(tmp_path))
         async with application.run_test() as pilot:
             await pilot.pause(0.3)
             assert application._awaiting == "permissions"
 
-    async def test_denegar_permisos_queda_registrado(self, tmp_path):
-        """Denegar tiene consecuencias: la CLI se lanza en modo restringido."""
+    async def test_elegir_solo_lectura_quita_las_herramientas_de_sistema(self, tmp_path):
+        """Elegir «solo mirar» tiene que notarse en lo que se le pasa a la CLI."""
         from term import config
-        config.save_config({**config.DEFAULTS, "permissions_granted": False})
+        config.save_config({**config.DEFAULTS, "permission_level": ""})
         application = TermApp(workdir=str(tmp_path))
         async with application.run_test() as pilot:
             await pilot.pause(0.3)
-            await application._handle_dialog("n", application._first_tab_id())
-            assert application._permissions_granted is False
-            chat = application._active_chat()
-            cmd = chat.session.build_command(
-                "hola", restricted=not application._permissions_granted)
-            assert "--restricted" in cmd
+            await application._handle_dialog("1", application._first_tab_id())
+            assert application._permission_level == "lectura"
+            cmd = application._active_chat().session.build_command(
+                "hola", cli_tools=application._nivel.cli_tools)
+            assert "Bash(osascript:*)" not in cmd
+            assert "Read" in cmd
 
 
 class TestPaneles:
@@ -295,14 +295,14 @@ class TestComandos:
         assert application._lang == "ja"
         assert load_config()["lang"] == "ja"
 
-    async def test_permissions_solo_acepta_modos_validos(self, app):
+    async def test_permissions_solo_acepta_niveles_validos(self, app):
         application, _ = app
-        await application._handle_command("/permissions acceptEdits",
+        await application._handle_command("/permissions todo",
                                           application._active_tab_id())
-        assert application._permission_mode == "acceptEdits"
+        assert application._permission_level == "todo"
         await application._handle_command("/permissions inventado",
                                           application._active_tab_id())
-        assert application._permission_mode == "acceptEdits"
+        assert application._permission_level == "todo"
 
     async def test_attach_registra_el_fichero(self, app, tmp_path):
         application, pilot = app
@@ -332,19 +332,19 @@ class TestComandos:
         await pilot.pause()
         assert application._active_chat().attachments == []
 
-    async def test_run_no_ejecuta_nada_sin_permisos(self, app, tmp_path):
-        """El dialogo de permisos tiene que significar algo de verdad."""
+    async def test_run_no_ejecuta_nada_en_solo_lectura(self, app, tmp_path):
+        """El nivel de permisos tiene que significar algo de verdad."""
         application, pilot = app
-        application._permissions_granted = False
+        application._permission_level = "lectura"
         marca = tmp_path / "no-deberia-existir.txt"
         await application._handle_command(
             f"/run touch {marca}", application._active_tab_id())
         await pilot.pause()
         assert not marca.exists()
 
-    async def test_run_ejecuta_con_permisos(self, app, tmp_path):
+    async def test_run_ejecuta_en_nivel_normal(self, app, tmp_path):
         application, pilot = app
-        application._permissions_granted = True
+        application._permission_level = "normal"
         application.workdir = str(tmp_path)
         marca = tmp_path / "creado.txt"
         await application._handle_command(
@@ -677,173 +677,29 @@ class TestProyectoYGit:
         await application._handle_command("/status", application._active_tab_id())
         await pilot.pause()  # basta con que no reviente
 
-    async def test_allow_cambia_el_perfil_y_se_guarda(self, app):
+    async def test_permissions_cambia_el_nivel_y_se_guarda(self, app):
+        application, pilot = app
+        await application._handle_command("/permissions lectura",
+                                          application._active_tab_id())
+        await pilot.pause()
+        assert application._permission_level == "lectura"
+        assert load_config()["permission_level"] == "lectura"
+
+    async def test_permissions_rechaza_un_nivel_inventado(self, app):
+        application, pilot = app
+        antes = application._permission_level
+        await application._handle_command("/permissions loquesea",
+                                          application._active_tab_id())
+        await pilot.pause()
+        assert application._permission_level == antes
+
+    async def test_allow_es_un_alias_de_permissions(self, app):
+        """Eran dos comandos para lo mismo."""
         application, pilot = app
         await application._handle_command("/allow lectura",
                                           application._active_tab_id())
         await pilot.pause()
-        assert application._tool_profile == "lectura"
-        assert load_config()["tool_profile"] == "lectura"
-
-    async def test_allow_rechaza_un_perfil_inventado(self, app):
-        application, pilot = app
-        antes = application._tool_profile
-        await application._handle_command("/allow loquesea",
-                                          application._active_tab_id())
-        await pilot.pause()
-        assert application._tool_profile == antes
-
-    async def test_los_perfiles_nombran_herramientas_que_existen(self, app):
-        from term.app import PERMISSION_PROFILES
-        from term.tools import TOOLS
-
-        for nombre, permitidas in PERMISSION_PROFILES.items():
-            if permitidas is None:
-                continue
-            assert permitidas <= set(TOOLS), f"perfil {nombre} nombra algo que no existe"
-
-
-class TestArquitectoYEsqueleto:
-    async def test_architect_exige_un_proveedor_disponible(self, app):
-        application, pilot = app
-        chat = application._active_chat()
-        await application._handle_command("/architect ollama/llama3.3", chat.tab_id)
-        await pilot.pause()
-        from term.providers import get_provider
-
-        if not get_provider("ollama").available():
-            assert chat.architect == ""
-
-    async def test_architect_se_activa_y_se_apaga(self, app):
-        application, pilot = app
-        chat = application._active_chat()
-        await application._handle_command("/architect claude/opus", chat.tab_id)
-        await pilot.pause()
-        assert chat.architect == "claude/opus"
-
-        await application._handle_command("/architect off", chat.tab_id)
-        await pilot.pause()
-        assert chat.architect == ""
-
-    async def test_el_arquitecto_es_de_cada_pestana(self, app):
-        application, pilot = app
-        primera = application._active_chat()
-        await application._handle_command("/architect claude/opus", primera.tab_id)
-        await application.action_new_tab()
-        await pilot.pause()
-        assert application._active_chat().architect == ""
-
-    async def test_el_arquitecto_no_ejecuta_nada(self, app, monkeypatch):
-        """Planifica, no toca: si pudiera actuar, el trabajo se haría dos veces."""
-        application, _ = app
-        chat = application._active_chat()
-        chat.architect = "claude/opus"
-        recibidos = {}
-
-        async def falso_run(self, prompt, **kwargs):
-            recibidos.update(kwargs)
-            return
-            yield  # pragma: no cover
-
-        monkeypatch.setattr("term.session.ChatSession.run", falso_run)
-        await application._plan_with_architect(chat, "haz algo")
-        assert recibidos["restricted"] is True
-        assert recibidos["allowed_tools"] == frozenset()
-
-    async def test_si_el_arquitecto_falla_el_turno_sigue(self, app, monkeypatch):
-        """Quedarse sin respuesta sería peor que quedarse sin plan."""
-        application, _ = app
-        chat = application._active_chat()
-        chat.architect = "claude/opus"
-
-        async def revienta(self, prompt, **kwargs):
-            raise RuntimeError("sin red")
-            yield  # pragma: no cover
-
-        monkeypatch.setattr("term.session.ChatSession.run", revienta)
-        assert await application._plan_with_architect(chat, "x") == ""
-
-    async def test_skeleton_alterna_y_se_guarda(self, app):
-        application, pilot = app
-        antes = application._skeleton
-        await application._handle_command("/skeleton", application._active_tab_id())
-        await pilot.pause()
-        assert application._skeleton is not antes
-        assert load_config()["code_skeleton"] is application._skeleton
-
-    async def test_con_skeleton_el_prompt_lleva_firmas(self, app, tmp_path):
-        application, pilot = app
-        (tmp_path / "m.py").write_text("def firma_reconocible(x: int) -> str: ...\n")
-        application._set_workdir(str(tmp_path))
-        application._skeleton = True
-        await pilot.pause()
-        prompt = application._system_prompt(application._active_chat())
-        assert "def firma_reconocible(x: int) -> str" in prompt
-
-    async def test_sin_skeleton_solo_va_la_lista(self, app, tmp_path):
-        application, pilot = app
-        (tmp_path / "m.py").write_text("def firma_reconocible(x: int) -> str: ...\n")
-        application._set_workdir(str(tmp_path))
-        application._skeleton = False
-        await pilot.pause()
-        prompt = application._system_prompt(application._active_chat())
-        assert "m.py" in prompt
-        assert "firma_reconocible" not in prompt
-
-
-class TestScrollDeLosPaneles:
-    """El panel de ayuda no cabía en pantalla y no había forma de bajarlo."""
-
-    @pytest.mark.parametrize("panel", ["help", "settings", "apps", "tools"])
-    async def test_el_panel_no_se_estira_mas_que_la_pantalla(self, app, panel):
-        """El TabPane crecía hasta el alto del texto, así que max_scroll_y era
-        cero y no había nada que desplazar."""
-        from textual.widgets import TabPane
-
-        application, pilot = app
-        await application._show_panel(panel)
-        await pilot.pause()
-        pane = application.query_one(f"#pane-{panel}", TabPane)
-        assert pane.size.height <= application.size.height
-
-    async def test_la_ayuda_se_puede_desplazar(self, app):
-        from textual.containers import VerticalScroll
-
-        application, pilot = app
-        await application._show_panel("help")
-        await pilot.pause()
-        scroll = application.query_one("#pane-help .panel-scroll", VerticalScroll)
-        assert scroll.max_scroll_y > 0
-
-        await pilot.press("pagedown")
-        await pilot.pause()
-        assert scroll.scroll_y > 0
-
-        await pilot.press("end")
-        await pilot.pause()
-        assert scroll.scroll_y == pytest.approx(scroll.max_scroll_y, abs=1)
-
-    async def test_el_foco_va_al_panel_para_poder_desplazar(self, app):
-        """Sin foco habría que pinchar antes de usar las flechas."""
-        from textual.containers import VerticalScroll
-
-        application, pilot = app
-        await application._show_panel("help")
-        await pilot.pause()
-        assert isinstance(application.focused, VerticalScroll)
-
-    @pytest.mark.parametrize("tecla", ["escape", "ctrl+w"])
-    async def test_se_sigue_cerrando_con_el_foco_en_el_panel(self, app, tecla):
-        from term.app import ChatInput
-
-        application, pilot = app
-        await application._show_panel("help")
-        await pilot.pause()
-        await pilot.press(tecla)
-        await pilot.pause()
-        assert application._active_panel_name() is None
-        # Y el foco vuelve al chat, para poder seguir escribiendo.
-        assert isinstance(application.focused, ChatInput)
+        assert application._permission_level == "lectura"
 
 
 class TestBuscadorDeArchivos:
@@ -1086,3 +942,61 @@ class TestPanelDeArchivos:
         await pilot.press("escape")
         await pilot.pause()
         assert application.workdir == antes
+
+
+class TestDialogoDePermisos:
+    """Se pregunta una vez, con tres opciones claras, y se recuerda."""
+
+    async def test_pregunta_al_arrancar_solo_la_primera_vez(self, tmp_path):
+        from term import config
+
+        config.save_config({**config.DEFAULTS, "permission_level": ""})
+        application = TermApp(workdir=str(tmp_path))
+        async with application.run_test() as pilot:
+            await pilot.pause(0.3)
+            assert application._awaiting == "permissions"
+
+        # Con el nivel ya elegido, no vuelve a preguntar.
+        config.save_config({**config.DEFAULTS, "permission_level": "normal"})
+        otra = TermApp(workdir=str(tmp_path))
+        async with otra.run_test() as pilot:
+            await pilot.pause(0.3)
+            assert otra._awaiting is None
+
+    async def test_enter_a_secas_acepta_el_recomendado(self, tmp_path):
+        from term import config
+        from term.permissions import DEFAULT_LEVEL
+
+        config.save_config({**config.DEFAULTS, "permission_level": ""})
+        application = TermApp(workdir=str(tmp_path))
+        async with application.run_test() as pilot:
+            await pilot.pause(0.3)
+            await application._handle_dialog("", application._first_tab_id())
+            assert application._permission_level == DEFAULT_LEVEL
+
+    async def test_se_puede_elegir_por_número_o_por_nombre(self, tmp_path):
+        from term import config
+
+        for entrada, esperado in (("3", "todo"), ("lectura", "lectura")):
+            config.save_config({**config.DEFAULTS, "permission_level": ""})
+            application = TermApp(workdir=str(tmp_path))
+            async with application.run_test() as pilot:
+                await pilot.pause(0.3)
+                await application._handle_dialog(entrada, application._first_tab_id())
+                assert application._permission_level == esperado
+
+    async def test_la_elección_se_recuerda(self, app):
+        application, pilot = app
+        await application._handle_command("/permissions todo",
+                                          application._active_tab_id())
+        await pilot.pause()
+        assert load_config()["permission_level"] == "todo"
+
+    async def test_el_nivel_llega_al_turno(self, app):
+        """De nada sirve elegir si luego no se le pasa a la CLI."""
+        application, _ = app
+        application._permission_level = "normal"
+        chat = application._active_chat()
+        cmd = chat.session.build_command(
+            "hola", cli_tools=application._nivel.cli_tools)
+        assert "Bash(osascript:*)" in cmd

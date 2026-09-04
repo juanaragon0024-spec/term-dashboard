@@ -32,7 +32,7 @@ def test_claves_nuevas_aparecen_con_su_valor_por_defecto():
     config.CONFIG_PATH.write_text(json.dumps({"theme": "gruvbox"}))
     cfg = config.load_config()
     assert cfg["theme"] == "gruvbox"
-    assert cfg["permission_mode"] == "default"
+    assert cfg["permission_level"] == ""
 
 
 def test_claves_desconocidas_se_descartan():

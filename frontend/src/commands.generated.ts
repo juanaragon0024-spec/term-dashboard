@@ -117,13 +117,13 @@ export const COMMAND_GROUPS: CommandGroup[] = [
         "web": false
       },
       {
-        "cmd": "/permissions [modo]",
-        "desc": "Modo de permisos (default, acceptEdits, plan, bypassPermissions)",
+        "cmd": "/permissions [nivel]",
+        "desc": "Qué puede hacer la IA (lectura, normal, todo)",
         "web": false
       },
       {
-        "cmd": "/allow [perfil]",
-        "desc": "Qué herramientas puede usar la IA (todo, lectura, segura, nada)",
+        "cmd": "/allow [nivel]",
+        "desc": "Lo mismo que /permissions",
         "web": false
       },
       {

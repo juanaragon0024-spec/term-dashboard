@@ -93,6 +93,7 @@ class Provider(ABC):
         system_prompt: str = "",
         restricted: bool = False,
         permission_mode: str = "",
+        allowed_tools: tuple[str, ...] = (),
         max_turns: int = 15,
     ) -> list[str]:
         """Linea de comandos completa para un turno."""
@@ -140,7 +141,8 @@ class ClaudeProvider(Provider):
         self, prompt: str, *, model: str = "", session_id: str = "",
         resume: bool = False, workdir: str = "", effort: str = "",
         system_prompt: str = "", restricted: bool = False,
-        permission_mode: str = "", max_turns: int = 15,
+        permission_mode: str = "", allowed_tools: tuple[str, ...] = (),
+        max_turns: int = 15,
     ) -> list[str]:
         cmd = [self.binary, "-p", prompt]
 
@@ -160,12 +162,16 @@ class ClaudeProvider(Provider):
             cmd += ["--model", alias]
         if effort:
             cmd += ["--effort", effort]
-        # Rechazar los permisos deja la CLI sin herramientas que ejecuten
-        # codigo; es mas fuerte que cualquier modo, asi que gana.
+        # El nivel de permisos llega ya traducido a lo que la CLI entiende.
+        # Sin esto la CLI se paraba a preguntar y, en modo -p, no puede: por
+        # eso «pon la siguiente canción» acababa en «necesito tu aprobación».
         if restricted:
             cmd += ["--restricted"]
-        elif permission_mode and permission_mode != "default":
-            cmd += ["--permission-mode", permission_mode]
+        else:
+            if allowed_tools:
+                cmd += ["--allowedTools", *allowed_tools]
+            if permission_mode and permission_mode != "default":
+                cmd += ["--permission-mode", permission_mode]
         if system_prompt:
             cmd += ["--append-system-prompt", system_prompt]
         if workdir:
@@ -264,7 +270,8 @@ class OpencodeProvider(Provider):
         self, prompt: str, *, model: str = "", session_id: str = "",
         resume: bool = False, workdir: str = "", effort: str = "",
         system_prompt: str = "", restricted: bool = False,
-        permission_mode: str = "", max_turns: int = 15,
+        permission_mode: str = "", allowed_tools: tuple[str, ...] = (),
+        max_turns: int = 15,
     ) -> list[str]:
         cmd = [self.binary, "run", "--format", "json"]
 
@@ -365,7 +372,8 @@ class OllamaProvider(Provider):
         self, prompt: str, *, model: str = "", session_id: str = "",
         resume: bool = False, workdir: str = "", effort: str = "",
         system_prompt: str = "", restricted: bool = False,
-        permission_mode: str = "", max_turns: int = 15,
+        permission_mode: str = "", allowed_tools: tuple[str, ...] = (),
+        max_turns: int = 15,
     ) -> list[str]:
         message = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
         return [self.binary, "run", model or "llama3.3", message]

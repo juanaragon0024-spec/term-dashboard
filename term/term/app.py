@@ -38,6 +38,7 @@ from . import forge, vcs
 from . import jobs as jobs_mod
 from . import keys as keystore
 from . import mcp as mcp_mod
+from . import permissions as perms
 from . import syscontrol as sysctl
 from .commands import (
     COMMAND_GROUPS,
@@ -50,7 +51,6 @@ from .i18n import LANGUAGES, translate
 from .models import (
     DEFAULT_MODEL_REF,
     EFFORT_LEVELS,
-    PERMISSION_MODES,
     catalog,
     model_label,
     normalise_ref,
@@ -74,22 +74,6 @@ _ATTACH_LIMIT = 40_000
 
 _PANELS = ("help", "apps", "tools", "settings")
 
-# Perfiles de permisos. Es lo que antes era un todo-o-nada: ahora se puede
-# dejar que lea y busque sin dejar que ejecute comandos.
-_SOLO_LECTURA = frozenset({
-    "leer_archivo", "listar_carpeta", "buscar_archivos", "buscar_texto",
-})
-_SEGURO = _SOLO_LECTURA | frozenset({
-    "crear_carpeta", "crear_archivo", "controlar_musica", "buscar_en_web",
-    "info_sistema", "ajustar_volumen",
-})
-PERMISSION_PROFILES: dict[str, frozenset[str] | None] = {
-    # None significa "todas las que el permiso general deje pasar".
-    "todo": None,
-    "segura": _SEGURO,
-    "lectura": _SOLO_LECTURA,
-    "nada": frozenset(),
-}
 
 
 def _human_size(num: int) -> str:
@@ -575,8 +559,8 @@ class TermApp(App):
         self._apps = sysctl.detect_cli_apps()
         self._browsers = sysctl.detect_browsers()
         self._default_browser: str = cfg["default_browser"]
-        self._permissions_granted: bool = cfg["permissions_granted"]
-        self._permission_mode: str = cfg["permission_mode"]
+        # Vacío significa que aún no ha elegido: se le pregunta al arrancar.
+        self._permission_level: str = cfg["permission_level"]
         self._lang: str = lang or cfg["lang"]
         self._show_files: bool = cfg["show_file_panel"]
         self._store = SessionStore()
@@ -585,7 +569,6 @@ class TermApp(App):
         self._pending_tab_name: str | None = None
         self._pending_url: str = ""
         self._git_branch = ""
-        self._tool_profile: str = cfg["tool_profile"]
         # Los servidores MCP se arrancan a la primera que hacen falta, no al
         # abrir Term: lanzar procesos por si acaso es un mal negocio.
         self._mcp = mcp_mod.McpRegistry()
@@ -601,6 +584,11 @@ class TermApp(App):
 
     def _t(self, key: str, **kwargs: object) -> str:
         return translate(self._lang, key, **kwargs)
+
+    @property
+    def _nivel(self) -> perms.Level:
+        """Lo que la IA puede hacer ahora mismo."""
+        return perms.get_level(self._permission_level or perms.DEFAULT_LEVEL)
 
     # ------------------------------------------------------- variables de CSS
 
@@ -730,7 +718,7 @@ class TermApp(App):
         if not claude_available():
             await self._post_error(self._first_tab_id(), self._t("claude_missing"))
 
-        if not self._permissions_granted:
+        if not self._permission_level:
             self.set_timer(0.1, lambda: self.run_worker(self._ask_permissions()))
         else:
             self._focus_input(self._first_tab_id())
@@ -786,12 +774,10 @@ class TermApp(App):
             "workdir": self.workdir,
             "effort": self.effort,
             "model": self.current_model,
-            "permissions_granted": self._permissions_granted,
             "lang": self._lang,
             "default_browser": self._default_browser,
-            "permission_mode": self._permission_mode,
             "show_file_panel": self._show_files,
-            "tool_profile": self._tool_profile,
+            "permission_level": self._permission_level,
             "code_skeleton": self._skeleton,
         })
         cfg_mod.save_config(self._cfg)
@@ -1414,9 +1400,10 @@ class TermApp(App):
                 effort=self.effort,
                 workdir=chat.workdir or self.workdir,
                 system_prompt=self._system_prompt(chat),
-                permission_mode=self._permission_mode,
-                restricted=not self._permissions_granted,
-                allowed_tools=PERMISSION_PROFILES[self._tool_profile],
+                permission_mode=self._nivel.cli_mode,
+                cli_tools=self._nivel.cli_tools,
+                restricted=False,
+                allowed_tools=self._nivel.own_tools or None,
                 mcp=self._mcp if self._mcp.clients else None,
                 jobs=self._jobs if self._jobs.jobs else None,
             )
@@ -1495,25 +1482,25 @@ class TermApp(App):
     # ------------------------------------------------------------ dialogos
 
     async def _ask_permissions(self) -> None:
+        """Preguntar una vez qué puede hacer la IA, y recordarlo."""
         tab_id = self._first_tab_id()
         if not tab_id:
             return
         self._awaiting = "permissions"
         self._awaiting_tab = tab_id
         self._clear_empty_state(tab_id)
-        text = (
-            f"[bold]{self._t('perms_title')}[/]\n\n"
-            f"{self._t('perms_accept')}\n\n"
-            f"  [bold]{self._t('perms_apps')}[/]\n"
-            f"  [bold]{self._t('perms_files')}[/]\n"
-            f"  [bold]{self._t('perms_system')}[/]\n"
-            f"  [bold]{self._t('perms_config')}[/]\n"
-            f"  [bold]{self._t('perms_net')}[/]\n\n"
-            f"{self._t('perms_local')}\n"
-            f"{self._t('perms_oauth')}\n\n"
-            f"[bold]{self._t('perms_question')}[/]"
-        )
-        await self._post_info(tab_id, text, widget_id="dialog")
+
+        lineas = [f"[bold]{self._t('perms_title')}[/]\n"]
+        for i, nivel in enumerate(perms.LEVELS.values(), 1):
+            marca = "  [dim](recomendado)[/]" if nivel.key == perms.DEFAULT_LEVEL else ""
+            lineas.append(f"  [bold]{i}[/]) [bold]{nivel.name}[/]{marca}")
+            lineas.append(f"      {nivel.detail}")
+            lineas.append("")
+        lineas.append(f"[dim]{self._t('perms_choose')}[/]")
+        lineas.append(f"[dim]{self._t('perms_change_later')}[/]")
+
+        await self._post_info(tab_id, "\n".join(lineas), widget_id="dialog",
+                              listing=True)
         self._focus_input(tab_id)
 
     async def _handle_dialog(self, text: str, tab_id: str) -> None:
@@ -1524,13 +1511,21 @@ class TermApp(App):
             self.query_one("#dialog").remove()
 
         if kind == "permissions":
-            granted = text.lower() in ("s", "si", "sí", "y", "yes", "j", "ja", "1", "")
-            self._permissions_granted = granted
+            claves = perms.level_names()
+            escrito = text.strip().lower()
+            if escrito.isdigit() and 1 <= int(escrito) <= len(claves):
+                elegido = claves[int(escrito) - 1]
+            elif escrito in claves:
+                elegido = escrito
+            else:
+                # Enter a secas acepta el recomendado, que es lo que se espera.
+                elegido = perms.DEFAULT_LEVEL
+            self._permission_level = elegido
             self._persist()
+            nivel = perms.get_level(elegido)
             self.notify(
-                self._t("perms_granted") if granted else self._t("perms_denied"),
-                timeout=3,
-            )
+                self._t("perms_set", level=nivel.name, summary=nivel.summary),
+                timeout=4)
             await self._post_info(tab_id, build_logo(self.theme_key),
                                   widget_id=f"empty-{tab_id}")
             self._focus_input(tab_id)
@@ -1733,7 +1728,8 @@ class TermApp(App):
                                 else "skeleton_off"), timeout=3)
 
         elif cmd == "/allow":
-            self._cmd_allow(arg)
+            # Alias de /permissions: eran dos comandos para lo mismo.
+            self._cmd_permissions(arg)
 
         elif cmd == "/mcp":
             await self._cmd_mcp(tab_id)
@@ -2116,15 +2112,28 @@ class TermApp(App):
             self.notify(f"{nombre}: no había ninguna clave guardada", timeout=3)
 
     def _cmd_permissions(self, arg: str) -> None:
-        if arg in PERMISSION_MODES:
-            self._permission_mode = arg
-            self._persist()
-            self.notify(self._t("permission_mode_set", mode=arg), timeout=2)
-        else:
+        """Ver o cambiar lo que la IA puede hacer."""
+        clave = arg.strip().lower()
+        if not clave:
+            actual = self._nivel
+            lineas = [f"[bold]{self._t('perms_current', level=actual.name)}[/]\n"]
+            for nivel in perms.LEVELS.values():
+                marca = "[bold green]●[/]" if nivel.key == actual.key else "[dim]○[/]"
+                lineas.append(f"  {marca} [bold]{nivel.key}[/] — {nivel.summary}")
+            lineas.append("\n[dim]/permissions <nivel> para cambiarlo[/]")
+            self.notify("\n".join(lineas).replace("[bold]", "").replace("[/]", "")
+                        .replace("[dim]", "").replace("[bold green]", ""), timeout=8)
+            return
+        if clave not in perms.LEVELS:
             self.notify(
-                self._t("permission_modes", modes=", ".join(PERMISSION_MODES)),
-                timeout=4,
-            )
+                self._t("perms_levels", levels=", ".join(perms.level_names())),
+                timeout=5)
+            return
+        self._permission_level = clave
+        self._persist()
+        nivel = perms.get_level(clave)
+        self.notify(self._t("perms_set", level=nivel.name, summary=nivel.summary),
+                    timeout=4)
 
     def _cmd_attach(self, arg: str, chat: ChatTab | None) -> None:
         if not arg or chat is None:
@@ -2153,8 +2162,8 @@ class TermApp(App):
         if not arg:
             self.notify(self._t("run_usage"), timeout=2)
             return
-        if not self._permissions_granted:
-            self.notify(self._t("perms_denied"), timeout=3)
+        if not self._nivel.system:
+            self.notify(self._t("perms_read_only", level=self._nivel.name), timeout=4)
             return
         if jobs_mod.looks_long_running(arg):
             # Esperar a un servidor con /run cuelga la interfaz hasta que salta
@@ -2180,8 +2189,8 @@ class TermApp(App):
         if not arg:
             self.notify("Uso: /bg <comando>", timeout=3)
             return
-        if not self._permissions_granted:
-            self.notify(self._t("perms_denied"), timeout=3)
+        if not self._nivel.system:
+            self.notify(self._t("perms_read_only", level=self._nivel.name), timeout=4)
             return
         job = await self._jobs.start(arg, self.workdir)
         await self._post_info(
@@ -2575,23 +2584,6 @@ class TermApp(App):
                     worker=model_label(chat.model_ref)),
             timeout=4)
 
-    def _cmd_allow(self, arg: str) -> None:
-        """Elegir qué herramientas puede usar la IA."""
-        perfil = arg.strip().lower()
-        if perfil not in PERMISSION_PROFILES:
-            self.notify(
-                self._t("allow_profiles", profiles=", ".join(PERMISSION_PROFILES)),
-                timeout=5)
-            return
-        self._tool_profile = perfil
-        self._persist()
-        permitidas = PERMISSION_PROFILES[perfil]
-        self.notify(
-            self._t("allow_set",
-                    tools="todas" if permitidas is None
-                    else (", ".join(sorted(permitidas)) or "ninguna")),
-            timeout=4)
-
     async def _cmd_compact(self, tab_id: str) -> None:
         """Resumir la conversación para liberar contexto.
 
@@ -2737,9 +2729,10 @@ class TermApp(App):
             f"{self._t('effort_label')}: [bold]{self.effort}[/]\n"
             f"  {self._t('levels')}: {', '.join(EFFORT_LEVELS)}\n"
             f"  {self._t('change_cmd')}: [bold]/effort <nivel>[/]\n\n"
-            f"{self._t('permission_mode_set', mode=self._permission_mode)}\n"
-            f"  {self._t('permission_modes', modes=', '.join(PERMISSION_MODES))}\n"
-            f"  {self._t('change_cmd')}: [bold]/permissions <modo>[/]\n\n"
+            f"{self._t('perms_current', level=self._nivel.name)}\n"
+            f"  {self._nivel.summary}\n"
+            f"  {self._t('perms_levels', levels=', '.join(perms.level_names()))}\n"
+            f"  {self._t('change_cmd')}: [bold]/permissions <nivel>[/]\n\n"
             f"{self._t('lang_current', lang=LANGUAGES.get(self._lang, self._lang))}\n"
             f"  {self._t('change_cmd')}: [bold]/lang <código>[/]\n\n"
             f"{self._t('dir_label')}: [bold]{self.workdir}[/]\n"

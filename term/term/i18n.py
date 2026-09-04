@@ -1609,3 +1609,86 @@ _COMPACT_EXTRA: dict[str, dict[str, str]] = {
 for _key, _by_lang in _COMPACT_EXTRA.items():
     for _code in LANGUAGES:
         TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+# Textos del nivel de permisos, que sustituye a los tres ajustes anteriores.
+_PERMS_EXTRA: dict[str, dict[str, str]] = {
+    "perms_title": {
+        "es": "¿Qué quieres que pueda hacer Term?",
+        "en": "What should Term be allowed to do?",
+        "pt": "O que queres que o Term possa fazer?",
+        "fr": "Qu'est-ce que Term a le droit de faire ?",
+        "de": "Was soll Term dürfen?",
+        "it": "Cosa vuoi che Term possa fare?",
+        "zh": "你想让 Term 能做什么？",
+        "ja": "Term に何を許可しますか？",
+        "ko": "Term이 무엇을 할 수 있게 할까요?",
+        "ar": "ما الذي تريد أن يستطيع Term فعله؟",
+    },
+    "perms_choose": {
+        "es": "Escribe el número, o pulsa Enter para el recomendado.",
+        "en": "Type the number, or press Enter for the recommended one.",
+        "pt": "Escreve o número, ou carrega Enter para o recomendado.",
+        "fr": "Tapez le numéro, ou Entrée pour celui recommandé.",
+        "de": "Gib die Nummer ein, oder Enter für die Empfehlung.",
+        "it": "Scrivi il numero, o premi Invio per quello consigliato.",
+        "zh": "输入编号，或直接按 Enter 选推荐项。",
+        "ja": "番号を入力するか、Enter で推奨を選びます。",
+        "ko": "번호를 입력하거나 Enter로 권장값을 선택하세요.",
+        "ar": "اكتب الرقم، أو اضغط Enter للخيار المقترح.",
+    },
+    "perms_change_later": {
+        "es": "Se pregunta una sola vez. Luego se cambia con /permissions.",
+        "en": "Asked only once. Change it later with /permissions.",
+        "pt": "Pergunta-se só uma vez. Depois muda-se com /permissions.",
+        "fr": "Demandé une seule fois. Modifiable ensuite avec /permissions.",
+        "de": "Wird nur einmal gefragt. Später mit /permissions änderbar.",
+        "it": "Si chiede una sola volta. Poi si cambia con /permissions.",
+        "zh": "只问一次，之后用 /permissions 更改。",
+        "ja": "確認は一度だけ。あとは /permissions で変更できます。",
+        "ko": "한 번만 묻습니다. 이후 /permissions로 바꿀 수 있습니다.",
+        "ar": "يُسأل مرة واحدة فقط. غيّره لاحقًا بـ /permissions.",
+    },
+    "perms_set": {
+        "es": "Permisos: {level} — {summary}",
+        "en": "Permissions: {level} — {summary}",
+        "pt": "Permissões: {level} — {summary}",
+        "fr": "Autorisations : {level} — {summary}",
+        "de": "Berechtigungen: {level} — {summary}",
+        "it": "Permessi: {level} — {summary}",
+        "zh": "权限：{level} — {summary}",
+        "ja": "権限: {level} — {summary}",
+        "ko": "권한: {level} — {summary}",
+        "ar": "الأذونات: {level} — {summary}",
+    },
+    "perms_current": {
+        "es": "Permisos: {level}", "en": "Permissions: {level}",
+        "pt": "Permissões: {level}", "fr": "Autorisations : {level}",
+        "de": "Berechtigungen: {level}", "it": "Permessi: {level}",
+        "zh": "权限：{level}", "ja": "権限: {level}", "ko": "권한: {level}",
+        "ar": "الأذونات: {level}",
+    },
+    "perms_levels": {
+        "es": "Niveles: {levels}", "en": "Levels: {levels}",
+        "pt": "Níveis: {levels}", "fr": "Niveaux : {levels}",
+        "de": "Stufen: {levels}", "it": "Livelli: {levels}",
+        "zh": "级别：{levels}", "ja": "レベル: {levels}", "ko": "수준: {levels}",
+        "ar": "المستويات: {levels}",
+    },
+    "perms_read_only": {
+        "es": "Con «{level}» no se ejecutan comandos. Cámbialo con /permissions normal",
+        "en": "«{level}» doesn't run commands. Change it with /permissions normal",
+        "pt": "Com «{level}» não se executam comandos. Muda com /permissions normal",
+        "fr": "« {level} » n'exécute pas de commandes. Changez avec /permissions normal",
+        "de": "„{level}“ führt keine Befehle aus. Ändere es mit /permissions normal",
+        "it": "Con «{level}» non si eseguono comandi. Cambialo con /permissions normal",
+        "zh": "「{level}」不执行命令。用 /permissions normal 更改。",
+        "ja": "「{level}」ではコマンドを実行しません。/permissions normal で変更できます。",
+        "ko": "'{level}'에서는 명령을 실행하지 않습니다. /permissions normal로 바꾸세요.",
+        "ar": "«{level}» لا ينفّذ الأوامر. غيّره بـ /permissions normal",
+    },
+}
+
+for _key, _by_lang in _PERMS_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])

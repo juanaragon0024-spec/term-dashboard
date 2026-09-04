@@ -164,7 +164,10 @@ class ChatSession:
         system_prompt: str = "",
         restricted: bool = False,
         permission_mode: str = "",
+        # Herramientas propias que se le ofrecen al modelo por API.
         allowed_tools: object = None,
+        # Patrones para el --allowedTools de una CLI.
+        cli_tools: tuple[str, ...] = (),
         mcp: object = None,
         jobs: object = None,
         max_turns: int = 15,
@@ -184,6 +187,7 @@ class ChatSession:
             system_prompt=system_prompt,
             restricted=restricted,
             permission_mode=permission_mode,
+            allowed_tools=cli_tools,
             max_turns=max_turns,
         )
 

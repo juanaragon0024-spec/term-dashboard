@@ -92,7 +92,7 @@ Escribe `/` para verlos todos, o `/help` para la guía. Los que más se usan:
 | **IA** | `/model` `/providers` `/key` · `/architect` `/effort` |
 | **Conversación** | `/sessions` `/resume` `/search` `/export` `/compact` |
 | **Sistema** | `/run` `/open` `/web` `/play` `/volume` `/sysinfo` |
-| **Permisos** | `/allow todo\|segura\|lectura\|nada` · `/permissions` |
+| **Permisos** | `/permissions lectura\|normal\|todo` |
 
 Todo en **10 idiomas** (`/lang`) y **6 temas** (`/theme`).
 
