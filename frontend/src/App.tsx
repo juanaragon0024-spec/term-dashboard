@@ -21,6 +21,10 @@ export interface ChatTabData {
   modelName: string
   messages: Message[]
   isLoading: boolean
+  /** Sesión de la CLI. Sin esto cada mensaje empezaría de cero, sin memoria. */
+  sessionId?: string
+  tokens?: number
+  cost?: number
 }
 
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const
@@ -37,7 +41,8 @@ function App() {
   const [workdir, setWorkdir] = useState(() => localStorage.getItem('term-workdir') || '')
   const [defaultModel, setDefaultModel] = useState('claude')
   const [contextTokens, setContextTokens] = useState(0)
-  const maxContext = 200000
+  // La ventana real la dice el backend al terminar el turno.
+  const [maxContext, setMaxContext] = useState(200000)
   const tabCounter = useRef(1)
   const abortRefs = useRef<Record<string, AbortController>>({})
   // Pestaña que se está renombrando ahora mismo, y el texto a medio escribir.
@@ -119,7 +124,12 @@ function App() {
   }, [])
 
   const clearTab = useCallback((tabId: string) => {
-    setTabs((prev) => prev.map((t) => t.id === tabId ? { ...t, messages: [] } : t))
+    // Se olvida también la sesión: si no, la IA seguiría recordando una
+    // conversación que el usuario ya no ve.
+    setTabs((prev) => prev.map((t) =>
+      t.id === tabId
+        ? { ...t, messages: [], sessionId: undefined, tokens: 0, cost: 0 }
+        : t))
     setContextTokens(0)
   }, [])
 
@@ -152,6 +162,9 @@ function App() {
           workdir: workdir || undefined,
           model: tab?.model,
           effort,
+          // A partir del segundo mensaje se continúa la conversación en curso.
+          sessionId: tab?.sessionId,
+          resume: Boolean(tab?.sessionId),
         }),
         signal: controller.signal,
       })
@@ -168,13 +181,43 @@ function App() {
           if (!line.startsWith('data: ')) continue
           try {
             const data = JSON.parse(line.slice(6))
+
             if (data.type === 'chunk') {
               setTabs((prev) => prev.map((t) =>
                 t.id === tabId
                   ? { ...t, messages: t.messages.map((m) => m.id === assistantId ? { ...m, content: m.content + data.content } : m) }
                   : t
               ))
-              if (data.tokens) setContextTokens(data.tokens)
+
+            } else if (data.type === 'session') {
+              // El id llega al principio; se guarda para el turno siguiente.
+              setTabs((prev) => prev.map((t) =>
+                t.id === tabId ? { ...t, sessionId: data.sessionId } : t))
+
+            } else if (data.type === 'tool') {
+              setTabs((prev) => prev.map((t) =>
+                t.id === tabId
+                  ? { ...t, messages: t.messages.map((m) => m.id === assistantId
+                      ? { ...m, content: m.content + `\n\n\`${data.name}\`\n\n` } : m) }
+                  : t
+              ))
+
+            } else if (data.type === 'usage') {
+              // Tokens y coste reales, que antes se estimaban por palabras.
+              setContextTokens(data.tokens || 0)
+              setTabs((prev) => prev.map((t) =>
+                t.id === tabId
+                  ? { ...t, tokens: data.tokens || 0, cost: data.cost || 0 }
+                  : t))
+              if (data.contextWindow) setMaxContext(data.contextWindow)
+
+            } else if (data.type === 'error') {
+              setTabs((prev) => prev.map((t) =>
+                t.id === tabId
+                  ? { ...t, messages: t.messages.map((m) => m.id === assistantId
+                      ? { ...m, content: (m.content ? m.content + '\n\n' : '') + `Error: ${data.content}` } : m) }
+                  : t
+              ))
             }
           } catch {}
         }
@@ -276,6 +319,11 @@ function App() {
           <span className="status-item context">
             Contexto: <span className="context-bar">{'█'.repeat(Math.round(contextPct / 100 * 15))}{'░'.repeat(15 - Math.round(contextPct / 100 * 15))}</span> {contextPct}% ({contextTokens.toLocaleString()}/{maxContext.toLocaleString()})
           </span>
+          {Boolean(activeTab?.cost) && (
+            <span className="status-item cost">
+              Coste: ${activeTab!.cost!.toFixed(4)}
+            </span>
+          )}
           <span className="status-item model">
             {models[activeTab?.model || 'claude'] || 'Claude'}
           </span>

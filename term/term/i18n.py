@@ -1579,3 +1579,33 @@ _ARCH_EXTRA: dict[str, dict[str, str]] = {
 for _key, _by_lang in _ARCH_EXTRA.items():
     for _code in LANGUAGES:
         TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+_COMPACT_EXTRA: dict[str, dict[str, str]] = {
+    "compact_cli": {
+        "es": "Aquí lo lleva la CLI: usa /clear para empezar de cero. "
+              "Resumir solo se puede en una pestaña conectada por API.",
+        "en": "The CLI keeps this history: use /clear to start over. "
+              "Compacting only works on a tab connected by API.",
+        "pt": "Aqui é a CLI quem guarda o histórico: usa /clear para recomeçar. "
+              "Resumir só funciona numa aba ligada por API.",
+        "fr": "Ici c'est la CLI qui garde l'historique : utilisez /clear pour "
+              "repartir. Résumer ne marche que sur un onglet connecté par API.",
+        "de": "Hier führt die CLI den Verlauf: /clear fängt neu an. "
+              "Zusammenfassen geht nur in einem per API verbundenen Tab.",
+        "it": "Qui la cronologia la tiene la CLI: usa /clear per ricominciare. "
+              "Riassumere funziona solo in una scheda collegata via API.",
+        "zh": "这里的历史由 CLI 保管：用 /clear 重新开始。"
+              "压缩只能在通过 API 连接的标签页里用。",
+        "ja": "ここでは履歴を CLI が持っています。/clear でやり直せます。"
+              "要約は API 接続のタブでのみ使えます。",
+        "ko": "여기서는 CLI가 기록을 관리합니다. /clear로 새로 시작하세요. "
+              "요약은 API로 연결된 탭에서만 됩니다.",
+        "ar": "هنا تحتفظ الأداة بالسجل: استخدم /clear للبدء من جديد. "
+              "التلخيص متاح فقط في تبويبة متصلة عبر واجهة برمجية.",
+    },
+}
+
+for _key, _by_lang in _COMPACT_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])

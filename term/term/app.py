@@ -2569,7 +2569,12 @@ class TermApp(App):
         if chat is None:
             return
         historial = chat.session.history
-        if not chat.session.is_api or len(historial) < 8:
+        if not chat.session.is_api:
+            # Con una CLI el historial lo lleva ella; decir «es corta» aquí
+            # sería mentir, porque puede ser larguísima.
+            self.notify(self._t("compact_cli"), timeout=6)
+            return
+        if len(historial) < 8:
             self.notify(self._t("compact_not_needed"), timeout=4)
             return
 

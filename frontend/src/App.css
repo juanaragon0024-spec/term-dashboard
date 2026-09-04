@@ -571,6 +571,9 @@ body {
 .status-item.effort:hover { color: var(--accent1); }
 .status-item.context { color: var(--accent1); }
 .context-bar { font-family: inherit; letter-spacing: -1px; font-size: 0.5rem; }
+.status-item.cost {
+  color: var(--accent3, var(--accent1));
+}
 .status-item.model { color: var(--accent2); font-weight: 600; }
 .status-item.workdir { color: var(--text-muted); margin-left: auto; }
 

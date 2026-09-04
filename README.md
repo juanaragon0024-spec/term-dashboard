@@ -1,7 +1,11 @@
 # Term
 
-TUI multipestaña sobre la CLI de Claude Code. Colores vivos, temas, sesiones con
-memoria y control del sistema, todo desde la terminal.
+Una terminal con IA que además actúa. Conecta Claude, GPT, Gemini, Grok o un
+modelo local, y desde la misma ventana creas archivos, buscas, lanzas el
+servidor de desarrollo, revisas el diff y confirmas el commit.
+
+La idea es no tener que moverte: lo que normalmente te hace abrir otra ventana
+—git, los logs de algo que está corriendo, buscar un archivo— cabe aquí.
 
 ## Instalar
 
@@ -9,91 +13,105 @@ memoria y control del sistema, todo desde la terminal.
 git clone https://github.com/juanaragon/term-dashboard.git
 cd term-dashboard/term
 pip install -e .
+term
 ```
 
-## Usar
+Necesitas **Python 3.10+**. Para el control del sistema (música, volumen, abrir
+apps) hace falta macOS; el resto funciona en cualquier parte y lo que no está
+disponible te lo dice en lugar de fallar en silencio.
+
+## Conectar una IA
+
+Hay dos formas, y `/providers` te enseña cuál tienes lista:
+
+**Por línea de comandos** — la CLI trae su propio agente.
 
 ```bash
-term                      # en el directorio actual
-term -w ~/mi-proyecto     # con directorio de trabajo
-term -t dracula           # con tema
-term -l en                # con idioma
+npm install -g @anthropic-ai/claude-code && claude auth login   # Claude Code
+npm install -g opencode-ai                                      # opencode
 ```
 
-## Requisitos
+**Por API** — aquí las herramientas las ejecuta Term. Con **OpenRouter** te
+vale una sola clave para GPT, Gemini, Grok, Claude, Llama y cientos más:
 
-- Python 3.10+
-- Claude Code CLI autenticado: `npm install -g @anthropic-ai/claude-code && claude auth login`
-- macOS para el control del sistema (Spotify, volumen, abrir apps). El resto
-  funciona en cualquier plataforma y las funciones no disponibles lo dicen en
-  lugar de fallar en silencio.
+```
+/key openrouter sk-or-v1-...
+/model openrouter/x-ai/grok-4
+```
 
-## Qué hace
+También hay conexión directa con OpenAI, Gemini, xAI, Groq, DeepSeek,
+Anthropic y Ollama local. Las claves se guardan en `keys.json` con permisos
+600, y se leen de las variables de entorno si ya las tienes exportadas.
 
-- **Conversaciones con memoria.** Cada pestaña mantiene su sesión, así que
-  Claude recuerda lo que le has dicho antes. Se retoman con `/sessions` y
-  `/resume`.
-- **Streaming con herramientas a la vista.** Verás cuándo Claude lee un
-  fichero, ejecuta algo o busca, no solo el texto final.
-- **Tokens y coste reales**, leídos de la CLI en vez de estimados.
-- **Entrada de varias líneas**: Enter envía, alt+Enter salta de línea.
-- **Historial** con las flechas y autocompletado de comandos con Tab.
-- **6 temas** que se cambian en caliente: Neon, Dracula, Monokai, Catppuccin,
-  Gruvbox, Tokyo Night.
-- **10 idiomas** traducidos de verdad: es, en, pt, fr, de, it, zh, ja, ko, ar.
-- **Rama de git** en la barra de estado.
-- **Permisos con efecto**: si los rechazas, la CLI se lanza en modo restringido
-  y `/run` no ejecuta nada.
-- Config guardada sola en `~/.config/term/config.json`.
+**Cada pestaña es independiente**: su IA, su conversación y su gasto. Puedes
+tener a Opus en una y a Gemini en otra sin que se enteren.
 
-## Comandos
+## Lo que sabe hacer
 
-Escribe `/` para verlos todos. Los más usados:
+Se lo puedes pedir en lenguaje normal:
 
-| Comando | Qué hace |
-|---|---|
-| `/new [nombre] [modelo]` | Nueva pestaña |
-| `/clear` | Limpiar el chat y empezar sesión nueva |
-| `/sessions` · `/resume <n>` | Listar y retomar conversaciones |
-| `/search <texto>` | Buscar en la conversación |
-| `/model <nombre\|id>` | `default`, `opus`, `sonnet`, `haiku` o un id concreto |
-| `/effort <nivel>` | `low`, `medium`, `high`, `max` |
-| `/theme <nombre>` · `/lang <código>` | Tema e idioma |
-| `/permissions <modo>` | `default`, `acceptEdits`, `plan`, `bypassPermissions` |
-| `/attach <ruta>` · `/detach` | Adjuntar ficheros al siguiente mensaje |
-| `/copy` · `/code [n]` | Copiar la respuesta o un bloque de código suelto |
-| `/export` | Guardar la conversación en Markdown |
-| `/run <cmd>` · `/open <app>` · `/volume <0-100>` | Sistema |
-| `/play` · `/next` · `/prev` · `/track` | Spotify |
+> «crea una carpeta notas y mete dentro un README»
+> «busca dónde está el archivo de configuración»
+> «por qué falla el build» — lee los logs del proceso que tienes corriendo
+> «abre el navegador y busca vuelos a Lisboa»
+
+Tiene doce herramientas propias (archivos, búsqueda, shell, música, web,
+sistema) y habla **MCP**, así que puedes darle las de cualquier servidor
+—GitHub, bases de datos, navegadores— sin escribir código:
+
+```
+/mcp-add github npx -y @modelcontextprotocol/server-github
+```
+
+Lee el `AGENTS.md` de tu repositorio y le pasa el esqueleto del código —clases
+y funciones con su firma— para que sepa a qué llamar sin volcarle los archivos
+enteros. En este proyecto eso cuesta 2.700 tokens en vez de 107.000.
 
 ## Atajos
 
 | Tecla | Qué hace |
 |---|---|
 | `enter` / `alt+enter` | Enviar / salto de línea |
-| `↑` `↓` | Mensajes ya enviados |
-| `tab` | Autocompletar comando |
-| `ctrl+t` / `ctrl+w` | Nueva pestaña / cerrar pestaña o panel |
-| `ctrl+1..9` | Ir a la pestaña n |
-| `ctrl+l` / `ctrl+e` / `ctrl+b` / `ctrl+y` | Limpiar / esfuerzo / archivos / copiar |
-| `esc` | Cancelar la generación o cerrar el panel |
+| `↑` `↓` · `tab` | Mensajes ya enviados · autocompletar |
+| `ctrl+p` | Buscar un archivo y meterlo en el contexto |
+| `ctrl+g` | Panel de git |
+| `ctrl+t` · `ctrl+w` · `ctrl+1..9` | Nueva pestaña · cerrar · ir a la n |
+| `ctrl+l` · `ctrl+e` · `ctrl+b` · `ctrl+y` | Limpiar · esfuerzo · archivos · copiar |
+| `esc` | Cancelar o cerrar el panel |
+
+## Comandos
+
+Escribe `/` para verlos todos, o `/help` para la guía. Los que más se usan:
+
+| | |
+|---|---|
+| **Trabajo** | `/bg` lanza sin bloquear · `/jobs` `/logs` `/stop` |
+| **Git** | `/git` panel · `/diff` `/commit` `/undo` `/status` |
+| **GitHub** | `/prs` `/issues` `/pr <n>` `/pr-checkout <n>` `/issue-new` |
+| **Contexto** | `/add` `/drop` `/context` · `/outline` `/map` `/skeleton` |
+| **IA** | `/model` `/providers` `/key` · `/architect` `/effort` |
+| **Conversación** | `/sessions` `/resume` `/search` `/export` `/compact` |
+| **Sistema** | `/run` `/open` `/web` `/play` `/volume` `/sysinfo` |
+| **Permisos** | `/allow todo\|segura\|lectura\|nada` · `/permissions` |
+
+Todo en **10 idiomas** (`/lang`) y **6 temas** (`/theme`).
 
 ## Desarrollo
 
 ```bash
 cd term
 pip install -e ".[dev]"
-pytest          # 154 tests
+pytest          # 479 tests
 ruff check .
 ```
 
 ## Versión web (experimental)
 
-`backend/` y `frontend/` son una versión en el navegador de lo mismo. El backend
-solo escucha en `127.0.0.1`, solo acepta el origen del frontend local y solo
-sirve ficheros por debajo de `TERM_ROOT` (por defecto, tu carpeta personal).
+`backend/` y `frontend/` son la misma idea en el navegador, con memoria de
+conversación y coste real. El backend solo escucha en `127.0.0.1`, solo acepta
+el origen del frontend local y solo sirve archivos por debajo de `TERM_ROOT`.
 
 ```bash
-cd backend && npm install && node server.js
-cd frontend && npm install && npm run dev
+cd backend  && npm install && node server.js
+cd frontend && npm install && npm run dev   # y npm test
 ```
