@@ -3,11 +3,14 @@
 /**
  * Backend de la versión web de Term.
  *
+ * Sirve la API y también la interfaz ya construida, así que todo vive en un
+ * solo puerto: una única dirección que abrir y sin CORS de por medio, porque
+ * las peticiones salen del mismo origen.
+ *
  * Este proceso puede leer ficheros y lanzar la CLI de Claude, así que solo
- * acepta peticiones del origen del frontend en local y solo sirve rutas que
- * cuelguen de un directorio raíz explícito. Antes /api/file servía cualquier
- * ruta del sistema con CORS abierto a todo: cualquier web que el usuario
- * visitase mientras el backend corría podía leerle las claves SSH.
+ * sirve rutas que cuelguen de un directorio raíz explícito. Antes /api/file
+ * servía cualquier ruta del sistema con CORS abierto a todo: cualquier web que
+ * el usuario visitase mientras el backend corría podía leerle las claves SSH.
  */
 
 const express = require('express');
@@ -24,22 +27,30 @@ const PORT = Number(process.env.PORT) || 3001;
 // Raíz permitida. Todo lo que se sirva tiene que estar dentro.
 const ROOT = path.resolve(process.env.TERM_ROOT || os.homedir());
 
-// Solo el frontend en local. Sin esto, cualquier página abierta en el
-// navegador podía llamar a esta API con las credenciales del usuario.
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
+// La interfaz construida. Al servirla desde aquí, el navegador y la API
+// comparten origen y no hace falta CORS.
+const UI_DIR = path.resolve(__dirname, '..', 'frontend', 'dist');
+const UI_BUILT = fs.existsSync(path.join(UI_DIR, 'index.html'));
+
+// En desarrollo la interfaz la sirve Vite en otro puerto, y solo entonces
+// hace falta permitir ese origen. Sin esto, cualquier página abierta en el
+// navegador podría llamar a esta API con las credenciales del usuario.
+const DEV_ORIGINS = new Set([
+  'http://localhost:5173', 'http://127.0.0.1:5173',
+  'http://localhost:4173', 'http://127.0.0.1:4173',
 ]);
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+    if (!origin || DEV_ORIGINS.has(origin)) return callback(null, true);
     return callback(new Error('origen no permitido'));
   },
 }));
 app.use(express.json({ limit: '1mb' }));
+
+if (UI_BUILT) {
+  app.use(express.static(UI_DIR));
+}
 
 // Resolver la ruta de claude una sola vez, sin pasar por una shell.
 let CLAUDE = 'claude';
@@ -210,6 +221,21 @@ app.post('/api/chat', (req, res) => {
   });
 });
 
+// Cualquier ruta que no sea de la API la resuelve la interfaz, que lleva su
+// propio enrutado en el navegador.
+if (UI_BUILT) {
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(UI_DIR, 'index.html'));
+  });
+}
+
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`Backend en http://127.0.0.1:${PORT} (raíz: ${ROOT})`);
+  console.log(`\n  Term  →  http://localhost:${PORT}`);
+  console.log(`  raíz: ${ROOT}`);
+  if (!UI_BUILT) {
+    console.log('\n  La interfaz no está construida todavía:');
+    console.log('    cd frontend && npm install && npm run build');
+    console.log('  Mientras tanto solo responde la API en /api/*.');
+  }
+  console.log('');
 });

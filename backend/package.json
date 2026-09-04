@@ -1,10 +1,13 @@
 {
-  "name": "backend",
+  "name": "term-web",
   "version": "1.0.0",
-  "description": "",
+  "description": "Term en el navegador: sirve la interfaz y la API en un solo puerto.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm run build:ui && node server.js",
+    "build:ui": "cd ../frontend && npm install --silent && npm run build",
+    "serve": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",

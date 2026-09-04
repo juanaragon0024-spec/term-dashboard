@@ -107,11 +107,23 @@ ruff check .
 
 ## Versión web (experimental)
 
-`backend/` y `frontend/` son la misma idea en el navegador, con memoria de
-conversación y coste real. El backend solo escucha en `127.0.0.1`, solo acepta
-el origen del frontend local y solo sirve archivos por debajo de `TERM_ROOT`.
+La misma idea en el navegador, con memoria de conversación y coste real. Todo
+en **una sola dirección**: el servidor sirve la interfaz y la API a la vez.
 
 ```bash
-cd backend  && npm install && node server.js
-cd frontend && npm install && npm run dev   # y npm test
+cd backend && npm install && npm start
+```
+
+Y abres **http://localhost:3001**. `npm start` construye la interfaz y arranca
+el servidor; si solo quieres arrancarlo, `npm run serve`.
+
+Para desarrollar con recarga en caliente, `cd frontend && npm run dev` levanta
+Vite en el 5173 y reenvía `/api` al backend, así que sigues trabajando contra
+una sola dirección.
+
+El servidor escucha solo en `127.0.0.1` y solo sirve archivos por debajo de
+`TERM_ROOT`, que por defecto es tu carpeta personal:
+
+```bash
+TERM_ROOT=~/proyectos npm start    # acotarlo a lo que te interese
 ```
