@@ -2283,9 +2283,15 @@ class TermApp(App):
             "help": self._panel_help,
         }
         body = builders[panel]()
-        await pane.mount(Static(body, classes="panel"))
+        scroll = VerticalScroll(classes="panel-scroll")
+        await pane.mount(scroll)
+        await scroll.mount(Static(body, classes="panel"))
         await pane.mount(Static(f"[dim]{self._t('panel_close_hint')}[/]",
                                 classes="panel-hint"))
+        # El foco va al contenedor para que las flechas y AvPág desplacen sin
+        # tener que pinchar antes.
+        scroll.can_focus = True
+        scroll.focus()
 
     def _panel_settings(self) -> str:
         chat = self._active_chat()

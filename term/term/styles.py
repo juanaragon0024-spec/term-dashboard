@@ -221,8 +221,22 @@ Underline {
 }
 
 /* -- Panels -- */
+/* El contenido de un panel es mas largo que la pantalla, asi que va dentro de
+   un contenedor con scroll. Sin esto el TabPane crecia hasta el alto del texto
+   y no habia nada que desplazar. */
+.panel-scroll {
+    height: 1fr;
+    overflow-y: auto;
+    background: $bg1;
+    scrollbar-color: $border;
+    scrollbar-color-hover: $accent1;
+}
+.panel-scroll:focus {
+    scrollbar-color: $accent1;
+}
 .panel {
-    padding: 2 4;
+    height: auto;
+    padding: 1 3;
     background: $bg1;
 }
 .panel Label {

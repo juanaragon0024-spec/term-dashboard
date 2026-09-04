@@ -789,3 +789,58 @@ class TestArquitectoYEsqueleto:
         prompt = application._system_prompt(application._active_chat())
         assert "m.py" in prompt
         assert "firma_reconocible" not in prompt
+
+
+class TestScrollDeLosPaneles:
+    """El panel de ayuda no cabía en pantalla y no había forma de bajarlo."""
+
+    @pytest.mark.parametrize("panel", ["help", "settings", "apps", "tools"])
+    async def test_el_panel_no_se_estira_mas_que_la_pantalla(self, app, panel):
+        """El TabPane crecía hasta el alto del texto, así que max_scroll_y era
+        cero y no había nada que desplazar."""
+        from textual.widgets import TabPane
+
+        application, pilot = app
+        await application._show_panel(panel)
+        await pilot.pause()
+        pane = application.query_one(f"#pane-{panel}", TabPane)
+        assert pane.size.height <= application.size.height
+
+    async def test_la_ayuda_se_puede_desplazar(self, app):
+        from textual.containers import VerticalScroll
+
+        application, pilot = app
+        await application._show_panel("help")
+        await pilot.pause()
+        scroll = application.query_one("#pane-help .panel-scroll", VerticalScroll)
+        assert scroll.max_scroll_y > 0
+
+        await pilot.press("pagedown")
+        await pilot.pause()
+        assert scroll.scroll_y > 0
+
+        await pilot.press("end")
+        await pilot.pause()
+        assert scroll.scroll_y == pytest.approx(scroll.max_scroll_y, abs=1)
+
+    async def test_el_foco_va_al_panel_para_poder_desplazar(self, app):
+        """Sin foco habría que pinchar antes de usar las flechas."""
+        from textual.containers import VerticalScroll
+
+        application, pilot = app
+        await application._show_panel("help")
+        await pilot.pause()
+        assert isinstance(application.focused, VerticalScroll)
+
+    @pytest.mark.parametrize("tecla", ["escape", "ctrl+w"])
+    async def test_se_sigue_cerrando_con_el_foco_en_el_panel(self, app, tecla):
+        from term.app import ChatInput
+
+        application, pilot = app
+        await application._show_panel("help")
+        await pilot.pause()
+        await pilot.press(tecla)
+        await pilot.pause()
+        assert application._active_panel_name() is None
+        # Y el foco vuelve al chat, para poder seguir escribiendo.
+        assert isinstance(application.focused, ChatInput)
