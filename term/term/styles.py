@@ -313,6 +313,94 @@ Footer {
     padding: 1 4;
 }
 
+/* -- Buscador difuso -- */
+FileFinder {
+    align: center middle;
+    background: $bg1 60%;
+}
+#finder {
+    width: 80%;
+    max-width: 100;
+    height: auto;
+    max-height: 24;
+    background: $bg2;
+    border: round $accent1;
+    padding: 0 1;
+}
+#finder-input {
+    background: $bg2;
+    color: $text;
+    border: none;
+    padding: 0 1;
+}
+#finder-list {
+    background: $bg2;
+    height: auto;
+    max-height: 20;
+    scrollbar-color: $border;
+}
+#finder-list ListItem {
+    background: $bg2;
+    color: $text;
+    padding: 0 1;
+}
+#finder-list ListItem.--highlight {
+    background: $bg3;
+    color: $accent1;
+    text-style: bold;
+}
+
+/* -- Panel de git -- */
+GitPanel {
+    align: center middle;
+    background: $bg1 60%;
+}
+#gitpanel {
+    width: 92%;
+    height: 85%;
+    background: $bg2;
+    border: round $accent1;
+    padding: 0 1;
+}
+#git-branch {
+    height: 1;
+    color: $accent4;
+    padding: 0 1;
+}
+#git-body {
+    height: 1fr;
+}
+#git-files {
+    width: 40%;
+    background: $bg2;
+    border-right: solid $border;
+    scrollbar-color: $border;
+}
+#git-files ListItem {
+    background: $bg2;
+    color: $text;
+    padding: 0 1;
+}
+#git-files ListItem.--highlight {
+    background: $bg3;
+    text-style: bold;
+}
+#git-diff-wrap {
+    width: 1fr;
+    background: $bg1;
+    overflow-y: auto;
+    scrollbar-color: $border;
+}
+#git-diff {
+    padding: 0 1;
+    height: auto;
+}
+#git-hint {
+    height: 1;
+    color: $muted;
+    padding: 0 1;
+}
+
 /* -- Bloque de error -- */
 .error-block {
     color: $accent2;

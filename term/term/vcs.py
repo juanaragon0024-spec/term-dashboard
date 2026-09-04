@@ -9,6 +9,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 __all__ = ["GitResult", "commit", "diff", "is_repo", "log", "status", "undo"]
 
@@ -42,6 +43,106 @@ def _git(cwd: str, *args: str, timeout: int = 20) -> GitResult:
     if proc.returncode != 0:
         return GitResult(False, reason=(proc.stderr or proc.stdout).strip())
     return GitResult(True, output=proc.stdout)
+
+
+@dataclass(frozen=True)
+class FileChange:
+    """Un archivo con cambios, tal y como lo cuenta git."""
+
+    path: str
+    index: str          # estado en el area de preparacion
+    worktree: str       # estado en el directorio de trabajo
+
+    @property
+    def staged(self) -> bool:
+        return self.index not in (" ", "?")
+
+    @property
+    def untracked(self) -> bool:
+        return self.index == "?" and self.worktree == "?"
+
+    @property
+    def label(self) -> str:
+        etiquetas = {"M": "modificado", "A": "añadido", "D": "borrado",
+                     "R": "renombrado", "C": "copiado", "U": "en conflicto"}
+        if self.untracked:
+            return "sin seguir"
+        estado = self.worktree if self.worktree != " " else self.index
+        return etiquetas.get(estado, estado)
+
+
+def changed_files(cwd: str) -> list[FileChange]:
+    """Los archivos con cambios, ya troceados para pintarlos en una lista."""
+    if not is_repo(cwd):
+        return []
+    result = _git(cwd, "status", "--porcelain=v1")
+    if not result:
+        return []
+    cambios: list[FileChange] = []
+    for linea in result.output.splitlines():
+        if len(linea) < 4:
+            continue
+        # Un renombrado viene como «viejo -> nuevo»; interesa el nuevo.
+        ruta = linea[3:].strip()
+        if " -> " in ruta:
+            ruta = ruta.split(" -> ", 1)[1]
+        cambios.append(FileChange(path=ruta.strip('"'),
+                                  index=linea[0], worktree=linea[1]))
+    return cambios
+
+
+def diff_file(cwd: str, path: str, staged: bool = False) -> GitResult:
+    """El diff de un solo archivo."""
+    if not is_repo(cwd):
+        return GitResult(False, reason="no es un repositorio git")
+    args = ["diff"] + (["--staged"] if staged else []) + ["--", path]
+    result = _git(cwd, *args)
+    if not result:
+        return result
+    texto = result.output.strip()
+    if not texto:
+        # Un archivo sin seguir no tiene diff: se enseña su contenido.
+        contenido = _git(cwd, "show", f":{path}") if staged else None
+        if contenido is None or not contenido:
+            ruta = Path(cwd) / path
+            if ruta.is_file():
+                try:
+                    crudo = ruta.read_text(errors="replace")
+                except OSError:
+                    crudo = ""
+                texto = "\n".join(f"+{ln}" for ln in crudo.splitlines()[:400])
+    if len(texto) > _MAX_DIFF:
+        texto = texto[:_MAX_DIFF] + "\n… (recortado)"
+    return GitResult(True, output=texto or "(sin cambios en este archivo)")
+
+
+def stage(cwd: str, path: str = "") -> GitResult:
+    """Preparar un archivo, o todos si no se dice cual."""
+    if not is_repo(cwd):
+        return GitResult(False, reason="no es un repositorio git")
+    return _git(cwd, "add", "--", path) if path else _git(cwd, "add", "-A")
+
+
+def unstage(cwd: str, path: str = "") -> GitResult:
+    """Sacar un archivo del área de preparación."""
+    if not is_repo(cwd):
+        return GitResult(False, reason="no es un repositorio git")
+    args = ["restore", "--staged"] + ([path] if path else ["."])
+    return _git(cwd, *args)
+
+
+def discard(cwd: str, path: str) -> GitResult:
+    """Tirar los cambios de un archivo.
+
+    Es la única operación de aquí que pierde trabajo, así que exige una ruta
+    concreta: un «descarta todo» a un teclazo de distancia es una tarde
+    perdida esperando a ocurrir.
+    """
+    if not is_repo(cwd):
+        return GitResult(False, reason="no es un repositorio git")
+    if not path.strip():
+        return GitResult(False, reason="hay que decir qué archivo descartar")
+    return _git(cwd, "checkout", "--", path)
 
 
 def is_repo(cwd: str) -> bool:

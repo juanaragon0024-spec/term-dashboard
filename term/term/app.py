@@ -18,9 +18,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.reactive import reactive, var
+from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
     Footer,
+    Input,
     Label,
     ListItem,
     ListView,
@@ -32,11 +34,11 @@ from textual.widgets import (
 )
 
 from . import config as cfg_mod
+from . import forge, vcs
 from . import jobs as jobs_mod
 from . import keys as keystore
 from . import mcp as mcp_mod
 from . import syscontrol as sysctl
-from . import vcs
 from .commands import (
     COMMAND_GROUPS,
     COMMANDS_HELP,
@@ -283,6 +285,193 @@ class ChatInput(TextArea):
 
 
 # ---------------------------------------------------------------------------
+# Buscador difuso de archivos
+# ---------------------------------------------------------------------------
+
+
+class FileFinder(ModalScreen[str]):
+    """Buscador de archivos al estilo de fzf.
+
+    Se abre encima de todo, filtra segun se escribe y devuelve la ruta elegida.
+    Ahorra el ciclo de /find, leer la ruta y copiarla a mano.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss_finder", "Cerrar", show=False),
+        Binding("down", "mover(1)", "Bajar", show=False),
+        Binding("up", "mover(-1)", "Subir", show=False),
+        Binding("enter", "elegir", "Elegir", show=False),
+    ]
+
+    def __init__(self, archivos: list[str], base: str) -> None:
+        super().__init__()
+        self.archivos = archivos
+        self.base = base
+        self.resultados: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="finder"):
+            yield Input(placeholder="Escribe parte del nombre…", id="finder-input")
+            yield ListView(id="finder-list")
+
+    def on_mount(self) -> None:
+        self._filtrar("")
+        self.query_one("#finder-input", Input).focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "finder-input":
+            self._filtrar(event.value)
+
+    def _filtrar(self, consulta: str) -> None:
+        from .fuzzy import highlight, search
+
+        lista = self.query_one("#finder-list", ListView)
+        lista.clear()
+        coincidencias = search(consulta, self.archivos, limit=40)
+        self.resultados = [m.text for m in coincidencias]
+        for match in coincidencias:
+            lista.append(ListItem(Label(highlight(match, on="bold $accent1"))))
+        if self.resultados:
+            lista.index = 0
+
+    def action_mover(self, paso: int) -> None:
+        lista = self.query_one("#finder-list", ListView)
+        if not self.resultados:
+            return
+        actual = lista.index or 0
+        lista.index = max(0, min(len(self.resultados) - 1, actual + paso))
+
+    def action_elegir(self) -> None:
+        lista = self.query_one("#finder-list", ListView)
+        indice = lista.index
+        if indice is not None and 0 <= indice < len(self.resultados):
+            self.dismiss(self.resultados[indice])
+        else:
+            self.dismiss("")
+
+    def action_dismiss_finder(self) -> None:
+        self.dismiss("")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        self.action_elegir()
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        event.stop()
+        self.action_elegir()
+
+
+class GitPanel(ModalScreen[None]):
+    """Panel de git: archivos a la izquierda, diff a la derecha.
+
+    Es la parte de lazygit que se usa a diario: mirar qué ha cambiado, elegir
+    qué entra en el commit y confirmarlo. Lo demás sigue estando en /run.
+    """
+
+    BINDINGS = [
+        Binding("escape,q", "cerrar", "Cerrar", show=False),
+        Binding("space", "alternar", "Preparar", show=False),
+        Binding("a", "preparar_todo", "Todo", show=False),
+        Binding("c", "confirmar", "Commit", show=False),
+        Binding("r", "recargar", "Recargar", show=False),
+        Binding("down,j", "mover(1)", "Bajar", show=False),
+        Binding("up,k", "mover(-1)", "Subir", show=False),
+    ]
+
+    def __init__(self, workdir: str, on_commit) -> None:
+        super().__init__()
+        self.workdir = workdir
+        self.on_commit = on_commit
+        self.cambios: list = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="gitpanel"):
+            yield Label("", id="git-branch")
+            with Horizontal(id="git-body"):
+                yield ListView(id="git-files")
+                with VerticalScroll(id="git-diff-wrap"):
+                    yield Static("", id="git-diff")
+            yield Label(
+                "[dim]espacio preparar · a todo · c commit · r recargar · esc cerrar[/]",
+                id="git-hint")
+
+    def on_mount(self) -> None:
+        self.action_recargar()
+        self.query_one("#git-files", ListView).focus()
+
+    def action_recargar(self) -> None:
+        lista = self.query_one("#git-files", ListView)
+        indice = lista.index or 0
+        lista.clear()
+        self.cambios = vcs.changed_files(self.workdir)
+
+        rama = sysctl.git_branch(self.workdir)
+        preparados = sum(1 for c in self.cambios if c.staged)
+        self.query_one("#git-branch", Label).update(
+            f"[bold]{rama or 'sin rama'}[/]  [dim]{len(self.cambios)} "
+            f"{'cambio' if len(self.cambios) == 1 else 'cambios'}, "
+            f"{preparados} {'preparado' if preparados == 1 else 'preparados'}[/]")
+
+        for cambio in self.cambios:
+            marca = "[bold green]●[/]" if cambio.staged else "[dim]○[/]"
+            lista.append(ListItem(Label(
+                f"{marca} {cambio.label[:11]:11s} {escape(cambio.path)}")))
+        if self.cambios:
+            lista.index = min(indice, len(self.cambios) - 1)
+            self._mostrar_diff()
+        else:
+            self.query_one("#git-diff", Static).update(
+                "[dim]No hay nada que confirmar.[/]")
+
+    def _seleccionado(self):
+        lista = self.query_one("#git-files", ListView)
+        indice = lista.index
+        if indice is None or not (0 <= indice < len(self.cambios)):
+            return None
+        return self.cambios[indice]
+
+    def _mostrar_diff(self) -> None:
+        cambio = self._seleccionado()
+        if cambio is None:
+            return
+        result = vcs.diff_file(self.workdir, cambio.path, staged=cambio.staged)
+        self.query_one("#git-diff", Static).update(
+            escape(result.output if result else result.reason))
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        self._mostrar_diff()
+
+    def action_mover(self, paso: int) -> None:
+        lista = self.query_one("#git-files", ListView)
+        if not self.cambios:
+            return
+        lista.index = max(0, min(len(self.cambios) - 1, (lista.index or 0) + paso))
+
+    def action_alternar(self) -> None:
+        """Preparar o dejar de preparar el archivo señalado."""
+        cambio = self._seleccionado()
+        if cambio is None:
+            return
+        if cambio.staged:
+            vcs.unstage(self.workdir, cambio.path)
+        else:
+            vcs.stage(self.workdir, cambio.path)
+        self.action_recargar()
+
+    def action_preparar_todo(self) -> None:
+        vcs.stage(self.workdir)
+        self.action_recargar()
+
+    def action_confirmar(self) -> None:
+        """Salir del panel y dejar el commit en manos del usuario."""
+        self.dismiss(None)
+        self.on_commit()
+
+    def action_cerrar(self) -> None:
+        self.dismiss(None)
+
+
+# ---------------------------------------------------------------------------
 # Pestana de chat
 # ---------------------------------------------------------------------------
 
@@ -350,6 +539,8 @@ class TermApp(App):
         Binding("ctrl+e", "cycle_effort", "Esfuerzo"),
         Binding("ctrl+b", "toggle_files", "Archivos"),
         Binding("ctrl+y", "copy_last", "Copiar", show=False),
+        Binding("ctrl+p", "find_file", "Buscar archivo"),
+        Binding("ctrl+g", "git_panel", "Git"),
         Binding("escape", "cancel", "Cancelar"),
         *[
             Binding(f"ctrl+{n}", f"goto_tab({n})", f"Tab {n}", show=False)
@@ -844,6 +1035,44 @@ class TermApp(App):
         tc = self.query_one("#main-tabs", TabbedContent)
         with contextlib.suppress(Exception):
             await tc.remove_pane(f"pane-{tab_id}")
+
+    def action_find_file(self) -> None:
+        """Abrir el buscador difuso y meter en el contexto lo que se elija."""
+        from .project import list_code_files
+
+        base = Path(self.workdir)
+        archivos = [str(f.relative_to(base)) if f.is_relative_to(base) else str(f)
+                    for f in list_code_files(self.workdir, limit=4000)]
+        if not archivos:
+            self.notify("no hay archivos que buscar aquí", timeout=3)
+            return
+
+        def elegido(ruta: str | None) -> None:
+            if not ruta:
+                return
+            chat = self._active_chat()
+            if chat is None:
+                return
+            ok, detalle = chat.context.add(ruta, self.workdir)
+            self._refresh_hint()
+            self.notify(
+                self._t("context_added", name=Path(detalle).name) if ok else detalle,
+                timeout=3)
+
+        self.push_screen(FileFinder(archivos, self.workdir), elegido)
+
+    def action_git_panel(self) -> None:
+        """Abrir el panel de git."""
+        if not vcs.is_repo(self.workdir):
+            self.notify(self._t("no_repo"), timeout=3)
+            return
+
+        def al_confirmar() -> None:
+            tab = self._active_tab_id()
+            if tab:
+                self.run_worker(self._cmd_commit("", tab))
+
+        self.push_screen(GitPanel(self.workdir, al_confirmar))
 
     def action_toggle_files(self) -> None:
         try:
@@ -1415,6 +1644,9 @@ class TermApp(App):
         elif cmd == "/attach":
             self._cmd_attach(arg, chat)
 
+        elif cmd == "/git":
+            self.action_git_panel()
+
         elif cmd == "/status":
             await self._cmd_git(vcs.status, tab_id)
 
@@ -1430,6 +1662,15 @@ class TermApp(App):
         elif cmd == "/undo":
             await self._cmd_git(vcs.undo, tab_id)
 
+        elif cmd in ("/prs", "/issues", "/repo"):
+            await self._cmd_forge_list(cmd, arg, tab_id)
+
+        elif cmd in ("/pr", "/issue", "/pr-checkout"):
+            await self._cmd_forge_item(cmd, arg, tab_id)
+
+        elif cmd == "/issue-new":
+            await self._cmd_issue_new(arg, tab_id)
+
         elif cmd == "/add":
             await self._cmd_add(arg, tab_id)
 
@@ -1438,6 +1679,9 @@ class TermApp(App):
 
         elif cmd == "/context":
             await self._cmd_context(tab_id)
+
+        elif cmd == "/f":
+            self.action_find_file()
 
         elif cmd == "/map":
             await self._cmd_map(tab_id)
@@ -2081,6 +2325,57 @@ class TermApp(App):
             "/commit <mensaje>.\n\n"
             f"```diff\n{cambios.output[:8000]}\n```"
         ))
+
+    async def _cmd_forge_list(self, cmd: str, arg: str, tab_id: str) -> None:
+        """Listados de GitHub. `mias` los acota a lo tuyo."""
+        mias = arg.strip().lower() in ("mias", "mías", "me", "@me")
+        funciones = {
+            "/prs": lambda: forge.list_prs(self.workdir, mine=mias),
+            "/issues": lambda: forge.list_issues(self.workdir, mine=mias),
+            "/repo": lambda: forge.repo_info(self.workdir),
+        }
+        self._set_loading(tab_id, self._t("processing"))
+        result = funciones[cmd]()
+        self._set_loading(tab_id, "")
+        if result:
+            await self._post_info(tab_id, result.output, listing=True)
+        else:
+            self.notify(result.reason, timeout=6)
+
+    async def _cmd_forge_item(self, cmd: str, arg: str, tab_id: str) -> None:
+        """Ver una PR o una incidencia, o traerse su rama."""
+        if not arg.strip().lstrip("#").isdigit():
+            self.notify(f"Uso: {cmd} <número>", timeout=3)
+            return
+        numero = int(arg.strip().lstrip("#"))
+        self._set_loading(tab_id, self._t("processing"))
+        if cmd == "/pr":
+            result = forge.view_pr(self.workdir, numero)
+        elif cmd == "/issue":
+            result = forge.view_issue(self.workdir, numero)
+        else:
+            result = forge.checkout_pr(self.workdir, numero)
+            if result:
+                self._refresh_git()
+                self._refresh_status()
+        self._set_loading(tab_id, "")
+        if result:
+            await self._post_info(tab_id, result.output, listing=True)
+        else:
+            self.notify(result.reason, timeout=6)
+
+    async def _cmd_issue_new(self, arg: str, tab_id: str) -> None:
+        if not arg.strip():
+            self.notify("Uso: /issue-new <título>", timeout=3)
+            return
+        self._set_loading(tab_id, self._t("processing"))
+        result = forge.create_issue(self.workdir, arg.strip())
+        self._set_loading(tab_id, "")
+        if result:
+            await self._post_info(tab_id, f"Incidencia creada: {result.output}",
+                                  listing=True)
+        else:
+            self.notify(result.reason, timeout=6)
 
     async def _cmd_add(self, arg: str, tab_id: str) -> None:
         chat = self._tabs.get(tab_id)

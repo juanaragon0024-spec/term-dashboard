@@ -114,3 +114,57 @@ class TestUndo:
 def test_log(repo):
     salida = vcs.log(str(repo), 5).output
     assert "inicial" in salida
+
+
+class TestPrepararArchivos:
+    def test_lista_los_cambios_troceados(self, repo):
+        (repo / "a.py").write_text("dos\n")
+        (repo / "nuevo.py").write_text("x\n")
+        cambios = {c.path: c for c in vcs.changed_files(str(repo))}
+        assert cambios["a.py"].label == "modificado"
+        assert cambios["nuevo.py"].untracked
+        assert not cambios["a.py"].staged
+
+    def test_preparar_y_soltar_un_archivo(self, repo):
+        (repo / "a.py").write_text("dos\n")
+        assert vcs.stage(str(repo), "a.py")
+        assert vcs.changed_files(str(repo))[0].staged
+
+        assert vcs.unstage(str(repo), "a.py")
+        assert not vcs.changed_files(str(repo))[0].staged
+
+    def test_preparar_todo(self, repo):
+        (repo / "a.py").write_text("dos\n")
+        (repo / "b.py").write_text("x\n")
+        vcs.stage(str(repo))
+        assert all(c.staged for c in vcs.changed_files(str(repo)))
+
+    def test_diff_de_un_solo_archivo(self, repo):
+        (repo / "a.py").write_text("dos\n")
+        (repo / "otro.py").write_text("no me mires\n")
+        salida = vcs.diff_file(str(repo), "a.py").output
+        assert "+dos" in salida
+        assert "no me mires" not in salida
+
+    def test_un_archivo_sin_seguir_enseña_su_contenido(self, repo):
+        """No tiene diff todavía, pero se quiere ver qué lleva dentro."""
+        (repo / "nuevo.py").write_text("contenido nuevo\n")
+        assert "contenido nuevo" in vcs.diff_file(str(repo), "nuevo.py").output
+
+    def test_descartar_exige_una_ruta(self, repo):
+        """Un «descarta todo» a un teclazo es una tarde perdida esperando."""
+        (repo / "a.py").write_text("dos\n")
+        assert not vcs.discard(str(repo), "")
+        assert (repo / "a.py").read_text() == "dos\n"
+
+    def test_descartar_un_archivo(self, repo):
+        (repo / "a.py").write_text("dos\n")
+        assert vcs.discard(str(repo), "a.py")
+        assert (repo / "a.py").read_text() == "uno\n"
+
+    def test_un_renombrado_se_lista_por_su_nombre_nuevo(self, repo):
+        import subprocess
+        subprocess.run(["git", "-C", str(repo), "mv", "a.py", "renombrado.py"],
+                       capture_output=True, check=True)
+        rutas = [c.path for c in vcs.changed_files(str(repo))]
+        assert "renombrado.py" in rutas

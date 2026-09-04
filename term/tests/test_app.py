@@ -844,3 +844,116 @@ class TestScrollDeLosPaneles:
         assert application._active_panel_name() is None
         # Y el foco vuelve al chat, para poder seguir escribiendo.
         assert isinstance(application.focused, ChatInput)
+
+
+class TestBuscadorDeArchivos:
+    async def test_se_abre_y_filtra(self, app, tmp_path):
+        from term.app import FileFinder
+
+        application, pilot = app
+        (tmp_path / "session.py").write_text("x")
+        (tmp_path / "store.py").write_text("x")
+        application._set_workdir(str(tmp_path))
+        application.action_find_file()
+        await pilot.pause()
+        assert isinstance(application.screen, FileFinder)
+
+        for tecla in "sess":
+            await pilot.press(tecla)
+        await pilot.pause()
+        assert application.screen.resultados[0].endswith("session.py")
+
+    async def test_al_elegir_lo_mete_en_el_contexto(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "elegido.py").write_text("SEÑA = 1")
+        application._set_workdir(str(tmp_path))
+        application.action_find_file()
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert application._active_chat().context.paths
+
+    async def test_escape_lo_cierra_sin_tocar_nada(self, app, tmp_path):
+        from term.app import FileFinder
+
+        application, pilot = app
+        (tmp_path / "a.py").write_text("x")
+        application._set_workdir(str(tmp_path))
+        application.action_find_file()
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(application.screen, FileFinder)
+        assert application._active_chat().context.paths == []
+
+    async def test_sin_archivos_avisa(self, app, tmp_path):
+        from term.app import FileFinder
+
+        application, pilot = app
+        vacia = tmp_path / "vacia"
+        vacia.mkdir()
+        application._set_workdir(str(vacia))
+        application.action_find_file()
+        await pilot.pause()
+        assert not isinstance(application.screen, FileFinder)
+
+
+class TestPanelDeGit:
+    async def test_fuera_de_un_repo_no_se_abre(self, app, tmp_path):
+        from term.app import GitPanel
+
+        application, pilot = app
+        application._set_workdir(str(tmp_path))
+        application.action_git_panel()
+        await pilot.pause()
+        assert not isinstance(application.screen, GitPanel)
+
+    async def test_lista_los_cambios_y_prepara_con_espacio(self, app, tmp_path):
+        import subprocess
+
+        from term import vcs
+        from term.app import GitPanel
+
+        application, pilot = app
+        # En su propia carpeta: la config de Term vive en tmp_path y saldría
+        # como un cambio más del repositorio.
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        ruta = str(repo)
+        subprocess.run(["git", "init", "-q", ruta], check=True)
+        for clave, valor in (("user.email", "t@t"), ("user.name", "T")):
+            subprocess.run(["git", "-C", ruta, "config", clave, valor], check=True)
+        (repo / "a.py").write_text("uno\n")
+        subprocess.run(["git", "-C", ruta, "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", ruta, "commit", "-qm", "i"], capture_output=True)
+        (repo / "a.py").write_text("dos\n")
+
+        application._set_workdir(ruta)
+        application.action_git_panel()
+        await pilot.pause()
+        assert isinstance(application.screen, GitPanel)
+        assert len(application.screen.cambios) == 1
+
+        await pilot.press("space")
+        await pilot.pause()
+        assert vcs.changed_files(ruta)[0].staged
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(application.screen, GitPanel)
+
+
+class TestGitHub:
+    async def test_sin_gh_avisa_en_vez_de_reventar(self, app, monkeypatch):
+        from term import forge
+
+        monkeypatch.setattr(forge, "available", lambda: False)
+        application, pilot = app
+        for comando in ("/prs", "/issues", "/repo"):
+            await application._handle_command(comando, application._active_tab_id())
+            await pilot.pause()
+
+    async def test_un_numero_que_no_es_numero(self, app):
+        application, pilot = app
+        await application._handle_command("/pr abc", application._active_tab_id())
+        await pilot.pause()  # basta con que no reviente
