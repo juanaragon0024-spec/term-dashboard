@@ -330,7 +330,7 @@ class OpenRouterProvider(OpenAICompatProvider):
     def _headers(self) -> dict[str, str]:
         cabeceras = super()._headers()
         # OpenRouter usa estas dos para atribuir el trafico.
-        cabeceras["HTTP-Referer"] = "https://github.com/juanaragon/term-dashboard"
+        cabeceras["HTTP-Referer"] = "https://github.com/juanaragon0024-spec/term-dashboard"
         cabeceras["X-Title"] = "Term"
         return cabeceras
 

@@ -9,11 +9,30 @@ La idea es no tener que moverte: lo que normalmente te hace abrir otra ventana
 
 ## Instalar
 
+Sin clonar nada, en un solo comando:
+
 ```bash
-git clone https://github.com/juanaragon/term-dashboard.git
+pip install "git+https://github.com/juanaragon0024-spec/term-dashboard.git#subdirectory=term"
+term
+```
+
+El `#subdirectory=term` es necesario porque el paquete vive en `term/`, no en
+la raíz del repositorio.
+
+Para trastear con el código, clónalo e instálalo en modo editable, que hace que
+los cambios se apliquen sin reinstalar:
+
+```bash
+git clone https://github.com/juanaragon0024-spec/term-dashboard.git
 cd term-dashboard/term
 pip install -e .
-term
+```
+
+Para actualizar a la última versión:
+
+```bash
+pip install --upgrade --force-reinstall \
+  "git+https://github.com/juanaragon0024-spec/term-dashboard.git#subdirectory=term"
 ```
 
 Necesitas **Python 3.10+**. Para el control del sistema (música, volumen, abrir

@@ -36,7 +36,7 @@ dev = [
 term = "term.app:main"
 
 [project.urls]
-Repository = "https://github.com/juanaragon/term-dashboard"
+Repository = "https://github.com/juanaragon0024-spec/term-dashboard"
 
 [tool.setuptools.dynamic]
 # La version vive solo en term/version.py; antes estaba escrita en tres
