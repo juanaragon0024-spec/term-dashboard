@@ -4,4 +4,4 @@ from __future__ import annotations
 
 __all__ = ["VERSION"]
 
-VERSION = "3.3.0"
+VERSION = "3.4.0"

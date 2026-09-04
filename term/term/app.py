@@ -308,6 +308,8 @@ class ChatTab(Vertical):
         # Archivos que el usuario ha metido a proposito en la conversacion.
         # A diferencia de los adjuntos, siguen ahi en los turnos siguientes.
         self.context = FileContext()
+        # Modelo que planifica antes de que este ejecute. Vacío: sin arquitecto.
+        self.architect: str = ""
         self.title = ""
 
     @property
@@ -381,6 +383,7 @@ class TermApp(App):
         # Los servidores MCP se arrancan a la primera que hacen falta, no al
         # abrir Term: lanzar procesos por si acaso es un mal negocio.
         self._mcp = mcp_mod.McpRegistry()
+        self._skeleton: bool = cfg["code_skeleton"]
         super().__init__()
         self.workdir = workdir or cfg["workdir"]
         self.theme_key = theme or cfg["theme"]
@@ -582,6 +585,7 @@ class TermApp(App):
             "permission_mode": self._permission_mode,
             "show_file_panel": self._show_files,
             "tool_profile": self._tool_profile,
+            "code_skeleton": self._skeleton,
         })
         cfg_mod.save_config(self._cfg)
 
@@ -1044,6 +1048,43 @@ class TermApp(App):
         self._set_loading(chat.tab_id, self._t("processing"))
         self._run_ai(chat, prompt)
 
+    async def _plan_with_architect(self, chat: ChatTab, peticion: str) -> str:
+        """Pedirle el plan al modelo arquitecto.
+
+        Se hace en una sesión aparte y sin herramientas: el arquitecto piensa,
+        no toca nada. Si falla, se devuelve cadena vacía y el turno sigue sin
+        plan, porque quedarse sin respuesta sería peor que quedarse sin plan.
+        """
+        planificador = ChatSession()
+        planificador.set_model_ref(chat.architect)
+        instruccion = (
+            "Eres el arquitecto. Traza un plan corto y concreto para lo que se "
+            "pide, en pasos numerados, diciendo qué archivos tocar y por qué. "
+            "No escribas el código: alguien lo va a ejecutar a partir de tu plan."
+        )
+        trozos: list[str] = []
+        try:
+            async for evento in planificador.run(
+                peticion,
+                effort=self.effort,
+                workdir=chat.workdir or self.workdir,
+                system_prompt=instruccion + "\n\n" + self._system_prompt(chat),
+                restricted=True,          # el arquitecto no ejecuta nada
+                allowed_tools=frozenset(),
+            ):
+                if evento.kind == "text":
+                    if evento.replaces_text:
+                        trozos = [evento.text]
+                    else:
+                        trozos.append(evento.text)
+                elif evento.kind == "result" and evento.text and not trozos:
+                    trozos.append(evento.text)
+                elif evento.kind == "error":
+                    return ""
+        except Exception:
+            return ""
+        return "".join(trozos).strip()
+
     def _system_prompt(self, chat: ChatTab) -> str:
         """Prompt de sistema del turno, con lo que Term sabe del proyecto.
 
@@ -1052,7 +1093,8 @@ class TermApp(App):
         hasta reiniciar.
         """
         partes = [build_system_context(self._lang, macos=sysctl.IS_MACOS)]
-        if resumen := project_summary(chat.workdir or self.workdir):
+        if resumen := project_summary(chat.workdir or self.workdir,
+                                      with_outline=self._skeleton):
             partes.append(resumen)
         if archivos := chat.context.render():
             partes.append(
@@ -1078,6 +1120,22 @@ class TermApp(App):
         errored = False
 
         try:
+            # Con arquitecto, primero se traza el plan y luego se ejecuta.
+            if chat.architect:
+                self._set_loading(chat.tab_id, self._t("planning"))
+                plan = await self._plan_with_architect(chat, prompt)
+                if plan:
+                    if area is not None:
+                        await area.mount(ToolEvent(
+                            model_label(chat.architect), "plan"))
+                        area.scroll_end(animate=False)
+                    prompt = (
+                        f"{prompt}\n\n"
+                        f"Plan trazado por {model_label(chat.architect)}; síguelo "
+                        f"salvo que veas un error:\n\n{plan}"
+                    )
+                self._set_loading(chat.tab_id, self._t("processing"))
+
             # Los servidores se levantan al primer turno que los pueda usar.
             if self._mcp.servers and not self._mcp.started:
                 await self._mcp.start_all()
@@ -1376,6 +1434,18 @@ class TermApp(App):
 
         elif cmd == "/map":
             await self._cmd_map(tab_id)
+
+        elif cmd == "/outline":
+            await self._cmd_outline(arg, tab_id)
+
+        elif cmd == "/architect":
+            self._cmd_architect(arg, chat)
+
+        elif cmd == "/skeleton":
+            self._skeleton = not self._skeleton
+            self._persist()
+            self.notify(self._t("skeleton_on" if self._skeleton
+                                else "skeleton_off"), timeout=3)
 
         elif cmd == "/allow":
             self._cmd_allow(arg)
@@ -2031,6 +2101,55 @@ class TermApp(App):
             return
         mcp_mod.save_servers(self._mcp.servers)
         self.notify(f"Servidor MCP quitado: {nombre}", timeout=2)
+
+    async def _cmd_outline(self, arg: str, tab_id: str) -> None:
+        """Clases y funciones con su firma, de un archivo o de todo el proyecto."""
+        from .outline import outline_file
+        from .project import build_code_outline
+
+        if arg.strip():
+            ruta = Path(arg.strip()).expanduser()
+            if not ruta.is_absolute():
+                ruta = Path(self.workdir) / ruta
+            texto = outline_file(ruta)
+            if not texto:
+                self.notify(f"no se pudo leer el esqueleto de {ruta.name}", timeout=3)
+                return
+        else:
+            texto = build_code_outline(self.workdir, budget=20_000)
+            if not texto:
+                self.notify("no hay código que resumir aquí", timeout=3)
+                return
+        await self._post_info(tab_id, texto, listing=True)
+
+    def _cmd_architect(self, arg: str, chat: ChatTab | None) -> None:
+        """Poner a otro modelo a planificar antes de ejecutar.
+
+        La idea es de Aider: un modelo bueno razonando traza el plan y otro más
+        barato lo lleva a cabo. Aquí sale casi gratis porque cada pestaña ya
+        sabe hablar con el modelo que sea.
+        """
+        if chat is None:
+            return
+        objetivo = arg.strip()
+        if not objetivo or objetivo in ("off", "no", "-"):
+            chat.architect = ""
+            self.notify(self._t("architect_off"), timeout=2)
+            return
+
+        ref = normalise_ref(objetivo)
+        provider_key, _ = split_ref(ref)
+        provider = get_provider(provider_key)
+        if not provider.available():
+            self.notify(
+                f"{provider.name}: {self._t('not_installed', name=provider.binary)}",
+                timeout=5)
+            return
+        chat.architect = ref
+        self.notify(
+            self._t("architect_on", model=model_label(ref),
+                    worker=model_label(chat.model_ref)),
+            timeout=4)
 
     def _cmd_allow(self, arg: str) -> None:
         """Elegir qué herramientas puede usar la IA."""

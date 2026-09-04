@@ -1522,3 +1522,60 @@ _GIT_EXTRA: dict[str, dict[str, str]] = {
 for _key, _by_lang in _GIT_EXTRA.items():
     for _code in LANGUAGES:
         TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+_ARCH_EXTRA: dict[str, dict[str, str]] = {
+    "architect_on": {
+        "es": "Modo arquitecto: {model} planifica y {worker} ejecuta",
+        "en": "Architect mode: {model} plans and {worker} executes",
+        "pt": "Modo arquiteto: {model} planeia e {worker} executa",
+        "fr": "Mode architecte : {model} planifie et {worker} exécute",
+        "de": "Architektenmodus: {model} plant, {worker} führt aus",
+        "it": "Modalità architetto: {model} pianifica e {worker} esegue",
+        "zh": "架构师模式：{model} 规划，{worker} 执行",
+        "ja": "設計モード: {model} が計画し、{worker} が実行します",
+        "ko": "설계 모드: {model}이(가) 계획하고 {worker}이(가) 실행합니다",
+        "ar": "وضع المهندس: {model} يخطّط و{worker} ينفّذ",
+    },
+    "architect_off": {
+        "es": "Modo arquitecto desactivado", "en": "Architect mode off",
+        "pt": "Modo arquiteto desativado", "fr": "Mode architecte désactivé",
+        "de": "Architektenmodus aus", "it": "Modalità architetto disattivata",
+        "zh": "架构师模式已关闭", "ja": "設計モードをオフにしました",
+        "ko": "설계 모드를 껐습니다", "ar": "أُوقف وضع المهندس",
+    },
+    "planning": {
+        "es": " Planificando…", "en": " Planning…", "pt": " A planear…",
+        "fr": " Planification…", "de": " Plane…", "it": " Pianificazione…",
+        "zh": " 正在规划…", "ja": " 計画中…", "ko": " 계획 중…",
+        "ar": " جارٍ التخطيط…",
+    },
+    "skeleton_on": {
+        "es": "Se pasará el esqueleto del código al modelo",
+        "en": "The code skeleton will be sent to the model",
+        "pt": "Será enviado o esqueleto do código ao modelo",
+        "fr": "Le squelette du code sera envoyé au modèle",
+        "de": "Das Codegerüst wird an das Modell geschickt",
+        "it": "Verrà inviato lo scheletro del codice al modello",
+        "zh": "将把代码骨架发送给模型",
+        "ja": "コードの骨格をモデルに渡します",
+        "ko": "코드 골격을 모델에 전달합니다",
+        "ar": "سيُرسل هيكل الشيفرة إلى النموذج",
+    },
+    "skeleton_off": {
+        "es": "Se pasará solo la lista de archivos",
+        "en": "Only the file list will be sent",
+        "pt": "Será enviada apenas a lista de ficheiros",
+        "fr": "Seule la liste des fichiers sera envoyée",
+        "de": "Es wird nur die Dateiliste geschickt",
+        "it": "Verrà inviato solo l'elenco dei file",
+        "zh": "只发送文件列表",
+        "ja": "ファイル一覧のみを渡します",
+        "ko": "파일 목록만 전달합니다",
+        "ar": "ستُرسل قائمة الملفات فقط",
+    },
+}
+
+for _key, _by_lang in _ARCH_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])

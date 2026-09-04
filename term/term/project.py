@@ -75,6 +75,42 @@ def read_agent_docs(workdir: str) -> str:
     return "\n\n".join(vistos)
 
 
+def list_code_files(workdir: str, limit: int = _MAX_MAP_FILES) -> list[Path]:
+    """Los archivos de codigo del proyecto, ya filtrados."""
+    base = Path(workdir or ".").expanduser().resolve()
+    if not base.is_dir():
+        return []
+    rutas = _tracked_files(base) or _walk(base)
+    codigo = [r for r in rutas if Path(r).suffix in _CODE_EXT]
+    return [base / r for r in sorted(codigo)[:limit]]
+
+
+def build_code_outline(workdir: str, budget: int = 12_000) -> str:
+    """Esqueleto del codigo del proyecto: clases, funciones y sus firmas.
+
+    Cuesta mas que la lista de archivos, pero evita tener que volcar archivos
+    enteros para que el modelo sepa a que puede llamar, que sale mucho mas caro.
+    """
+    from .outline import build_outline
+
+    archivos = list_code_files(workdir, limit=60)
+    return build_outline(archivos, budget=budget) if archivos else ""
+
+
+def _tracked_files(base: Path) -> list[str]:
+    """Los archivos que git conoce, que ya respetan el .gitignore."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(base), "ls-files"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [ln for ln in proc.stdout.splitlines() if ln.strip()]
+
+
 def build_repo_map(workdir: str, limit: int = _MAX_MAP_FILES) -> str:
     """Un mapa corto del proyecto: que archivos de codigo hay y donde.
 
@@ -86,20 +122,7 @@ def build_repo_map(workdir: str, limit: int = _MAX_MAP_FILES) -> str:
     if not base.is_dir():
         return ""
 
-    # `git ls-files` respeta el .gitignore, que es justo lo que queremos.
-    archivos: list[str] = []
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(base), "ls-files"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if proc.returncode == 0:
-            archivos = [ln for ln in proc.stdout.splitlines() if ln.strip()]
-    except (subprocess.SubprocessError, OSError):
-        archivos = []
-
-    if not archivos:
-        archivos = _walk(base)
+    archivos = _tracked_files(base) or _walk(base)
 
     interesantes = [a for a in archivos if Path(a).suffix in _CODE_EXT]
     if not interesantes:
@@ -206,7 +229,9 @@ class FileContext:
         return ", ".join(Path(p).name for p in self.paths)
 
 
-def project_summary(workdir: str, *, with_map: bool = True) -> str:
+def project_summary(
+    workdir: str, *, with_map: bool = True, with_outline: bool = False,
+) -> str:
     """Todo lo que Term sabe del proyecto, listo para el prompt de sistema."""
     partes: list[str] = []
     if docs := read_agent_docs(workdir):
@@ -214,6 +239,11 @@ def project_summary(workdir: str, *, with_map: bool = True) -> str:
             "Instrucciones del repositorio (respétalas por encima de tus "
             "costumbres):\n\n" + docs
         )
-    if with_map and (mapa := build_repo_map(workdir)):
+    if with_outline and (esqueleto := build_code_outline(workdir)):
+        # El esqueleto ya dice qué archivos hay, así que sustituye al mapa.
+        partes.append(
+            "Esqueleto del código (clases y funciones con su firma; pide el "
+            "archivo entero solo si necesitas el cuerpo):\n" + esqueleto)
+    elif with_map and (mapa := build_repo_map(workdir)):
         partes.append("Estructura del proyecto:\n" + mapa)
     return "\n\n".join(partes)

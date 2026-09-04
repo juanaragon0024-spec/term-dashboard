@@ -701,3 +701,91 @@ class TestProyectoYGit:
             if permitidas is None:
                 continue
             assert permitidas <= set(TOOLS), f"perfil {nombre} nombra algo que no existe"
+
+
+class TestArquitectoYEsqueleto:
+    async def test_architect_exige_un_proveedor_disponible(self, app):
+        application, pilot = app
+        chat = application._active_chat()
+        await application._handle_command("/architect ollama/llama3.3", chat.tab_id)
+        await pilot.pause()
+        from term.providers import get_provider
+
+        if not get_provider("ollama").available():
+            assert chat.architect == ""
+
+    async def test_architect_se_activa_y_se_apaga(self, app):
+        application, pilot = app
+        chat = application._active_chat()
+        await application._handle_command("/architect claude/opus", chat.tab_id)
+        await pilot.pause()
+        assert chat.architect == "claude/opus"
+
+        await application._handle_command("/architect off", chat.tab_id)
+        await pilot.pause()
+        assert chat.architect == ""
+
+    async def test_el_arquitecto_es_de_cada_pestana(self, app):
+        application, pilot = app
+        primera = application._active_chat()
+        await application._handle_command("/architect claude/opus", primera.tab_id)
+        await application.action_new_tab()
+        await pilot.pause()
+        assert application._active_chat().architect == ""
+
+    async def test_el_arquitecto_no_ejecuta_nada(self, app, monkeypatch):
+        """Planifica, no toca: si pudiera actuar, el trabajo se haría dos veces."""
+        application, _ = app
+        chat = application._active_chat()
+        chat.architect = "claude/opus"
+        recibidos = {}
+
+        async def falso_run(self, prompt, **kwargs):
+            recibidos.update(kwargs)
+            return
+            yield  # pragma: no cover
+
+        monkeypatch.setattr("term.session.ChatSession.run", falso_run)
+        await application._plan_with_architect(chat, "haz algo")
+        assert recibidos["restricted"] is True
+        assert recibidos["allowed_tools"] == frozenset()
+
+    async def test_si_el_arquitecto_falla_el_turno_sigue(self, app, monkeypatch):
+        """Quedarse sin respuesta sería peor que quedarse sin plan."""
+        application, _ = app
+        chat = application._active_chat()
+        chat.architect = "claude/opus"
+
+        async def revienta(self, prompt, **kwargs):
+            raise RuntimeError("sin red")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr("term.session.ChatSession.run", revienta)
+        assert await application._plan_with_architect(chat, "x") == ""
+
+    async def test_skeleton_alterna_y_se_guarda(self, app):
+        application, pilot = app
+        antes = application._skeleton
+        await application._handle_command("/skeleton", application._active_tab_id())
+        await pilot.pause()
+        assert application._skeleton is not antes
+        assert load_config()["code_skeleton"] is application._skeleton
+
+    async def test_con_skeleton_el_prompt_lleva_firmas(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "m.py").write_text("def firma_reconocible(x: int) -> str: ...\n")
+        application._set_workdir(str(tmp_path))
+        application._skeleton = True
+        await pilot.pause()
+        prompt = application._system_prompt(application._active_chat())
+        assert "def firma_reconocible(x: int) -> str" in prompt
+
+    async def test_sin_skeleton_solo_va_la_lista(self, app, tmp_path):
+        application, pilot = app
+        (tmp_path / "m.py").write_text("def firma_reconocible(x: int) -> str: ...\n")
+        application._set_workdir(str(tmp_path))
+        application._skeleton = False
+        await pilot.pause()
+        prompt = application._system_prompt(application._active_chat())
+        assert "m.py" in prompt
+        assert "firma_reconocible" not in prompt

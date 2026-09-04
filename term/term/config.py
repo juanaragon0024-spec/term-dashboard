@@ -40,6 +40,7 @@ DEFAULTS: dict[str, Any] = {
     "permission_mode": "default",
     "show_file_panel": False,
     "tool_profile": "todo",
+    "code_skeleton": False,
 }
 
 
