@@ -171,7 +171,7 @@ class ApiProvider(Provider):
 
                     yield ParsedEvent("tool", tool=nombre,
                                       detail=self._describe(args))
-                    ok, salida = toolkit.execute(nombre, args, ctx)
+                    ok, salida = await toolkit.execute_async(nombre, args, ctx)
                     prefijo = "" if ok else "ERROR: "
                     resultados.append((llamada.get("id", ""), nombre, prefijo + salida))
 

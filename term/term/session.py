@@ -165,6 +165,7 @@ class ChatSession:
         restricted: bool = False,
         permission_mode: str = "",
         allowed_tools: object = None,
+        mcp: object = None,
         max_turns: int = 15,
     ) -> list[str]:
         """Argumentos del turno. Aparte de `run` para poder comprobarlos
@@ -202,6 +203,7 @@ class ChatSession:
             workdir=str(kwargs.get("workdir") or ""),
             allow_system=not bool(kwargs.get("restricted")),
             allowed=frozenset(permitidas) if permitidas is not None else frozenset(),
+            mcp=kwargs.get("mcp"),
         )
         self.history.append(provider_user_turn(provider, prompt))
         self.started = True

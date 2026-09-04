@@ -37,6 +37,9 @@ COMMAND_GROUPS: dict[str, dict[str, str]] = {
         "/effort <nivel>":        "Nivel de esfuerzo (low, medium, high, max)",
         "/permissions [modo]":    "Modo de permisos (default, acceptEdits, plan, bypassPermissions)",
         "/allow [perfil]":        "Qué herramientas puede usar la IA (todo, lectura, segura, nada)",
+        "/mcp":                   "Servidores MCP y sus herramientas",
+        "/mcp-add <nombre> <cmd>": "Añadir un servidor MCP",
+        "/mcp-del <nombre>":      "Quitar un servidor MCP",
         "/compact":               "Resumir la conversación para liberar contexto",
     },
     "grp_git": {

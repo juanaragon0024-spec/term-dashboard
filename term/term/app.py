@@ -33,6 +33,7 @@ from textual.widgets import (
 
 from . import config as cfg_mod
 from . import keys as keystore
+from . import mcp as mcp_mod
 from . import syscontrol as sysctl
 from . import vcs
 from .commands import (
@@ -377,6 +378,9 @@ class TermApp(App):
         self._pending_url: str = ""
         self._git_branch = ""
         self._tool_profile: str = cfg["tool_profile"]
+        # Los servidores MCP se arrancan a la primera que hacen falta, no al
+        # abrir Term: lanzar procesos por si acaso es un mal negocio.
+        self._mcp = mcp_mod.McpRegistry()
         super().__init__()
         self.workdir = workdir or cfg["workdir"]
         self.theme_key = theme or cfg["theme"]
@@ -875,6 +879,10 @@ class TermApp(App):
         self._refresh_hint()
         self.notify(self._t("session_cleared"), timeout=3)
 
+    async def on_unmount(self) -> None:
+        """Parar los servidores MCP al cerrar, para no dejar procesos sueltos."""
+        await self._mcp.stop_all()
+
     async def action_cancel(self) -> None:
         """Esc cancela la generacion, o cierra el panel si no hay nada corriendo."""
         panel = self._active_panel_name()
@@ -1070,6 +1078,10 @@ class TermApp(App):
         errored = False
 
         try:
+            # Los servidores se levantan al primer turno que los pueda usar.
+            if self._mcp.servers and not self._mcp.started:
+                await self._mcp.start_all()
+
             stream = chat.session.run(
                 prompt,
                 effort=self.effort,
@@ -1078,6 +1090,7 @@ class TermApp(App):
                 permission_mode=self._permission_mode,
                 restricted=not self._permissions_granted,
                 allowed_tools=PERMISSION_PROFILES[self._tool_profile],
+                mcp=self._mcp if self._mcp.clients else None,
             )
             async for event in stream:
                 if event.kind == "text" and assistant is not None:
@@ -1366,6 +1379,15 @@ class TermApp(App):
 
         elif cmd == "/allow":
             self._cmd_allow(arg)
+
+        elif cmd == "/mcp":
+            await self._cmd_mcp(tab_id)
+
+        elif cmd == "/mcp-add":
+            self._cmd_mcp_add(arg)
+
+        elif cmd == "/mcp-del":
+            self._cmd_mcp_del(arg)
 
         elif cmd == "/compact":
             await self._cmd_compact(tab_id)
@@ -1945,6 +1967,70 @@ class TermApp(App):
 
         mapa = build_repo_map(self.workdir)
         await self._post_info(tab_id, mapa or "(proyecto vacío)", listing=True)
+
+    async def _cmd_mcp(self, tab_id: str) -> None:
+        """Servidores MCP declarados, con sus herramientas si están en marcha."""
+        if not self._mcp.servers:
+            await self._post_info(tab_id, (
+                "[bold]MCP[/]  [dim]sin servidores configurados[/]\n\n"
+                "  Un servidor MCP presta sus herramientas a Term: bases de datos,\n"
+                "  GitHub, navegadores y demás, sin escribirlas aquí.\n\n"
+                "  [bold]/mcp-add github npx -y @modelcontextprotocol/server-github[/]\n\n"
+                f"  [dim]También puedes editar {mcp_mod.MCP_PATH}[/]"
+            ), listing=True)
+            return
+
+        self._set_loading(tab_id, self._t("processing"))
+        fallos = await self._mcp.start_all()
+        self._set_loading(tab_id, "")
+
+        lineas = ["[bold]Servidores MCP[/]\n"]
+        for server in self._mcp.servers:
+            client = self._mcp.clients.get(server.name)
+            if not server.enabled:
+                marca, detalle = "[dim]◦[/]", "[dim]desactivado[/]"
+            elif server.name in fallos:
+                marca, detalle = "[bold red]×[/]", f"[dim]{fallos[server.name]}[/]"
+            elif client and client.running:
+                marca = "[bold green]•[/]"
+                detalle = f"[dim]{len(client.tools)} herramientas[/]"
+            else:
+                marca, detalle = "[dim]◦[/]", "[dim]parado[/]"
+            lineas.append(f"  {marca} [bold]{server.name}[/]  {detalle}")
+            lineas.append(f"      [dim]{server.command} {' '.join(server.args)}[/]")
+            if client and client.running:
+                for tool in client.tools[:8]:
+                    lineas.append(f"      [dim]· {tool.name}[/]")
+                if len(client.tools) > 8:
+                    lineas.append(f"      [dim]… y {len(client.tools) - 8} más[/]")
+        await self._post_info(tab_id, "\n".join(lineas), listing=True)
+
+    def _cmd_mcp_add(self, arg: str) -> None:
+        partes = arg.split()
+        if len(partes) < 2:
+            self.notify("Uso: /mcp-add <nombre> <comando> [argumentos…]", timeout=5)
+            return
+        nombre, comando, *args = partes
+        if any(s.name == nombre for s in self._mcp.servers):
+            self.notify(f"Ya existe un servidor llamado «{nombre}»", timeout=3)
+            return
+        self._mcp.servers.append(
+            mcp_mod.McpServer(name=nombre, command=comando, args=args))
+        if mcp_mod.save_servers(self._mcp.servers):
+            self.notify(f"Servidor MCP añadido: {nombre}. Compruébalo con /mcp",
+                        timeout=4)
+        else:
+            self.notify("No se pudo guardar la configuración MCP", timeout=3)
+
+    def _cmd_mcp_del(self, arg: str) -> None:
+        nombre = arg.strip()
+        antes = len(self._mcp.servers)
+        self._mcp.servers = [s for s in self._mcp.servers if s.name != nombre]
+        if len(self._mcp.servers) == antes:
+            self.notify(f"No hay ningún servidor llamado «{nombre}»", timeout=3)
+            return
+        mcp_mod.save_servers(self._mcp.servers)
+        self.notify(f"Servidor MCP quitado: {nombre}", timeout=2)
 
     def _cmd_allow(self, arg: str) -> None:
         """Elegir qué herramientas puede usar la IA."""

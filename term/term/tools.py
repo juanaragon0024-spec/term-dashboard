@@ -47,6 +47,9 @@ class ToolContext:
     # que lea y busque pero no que ejecute comandos.
     allowed: frozenset[str] = frozenset()
     denied: frozenset[str] = frozenset()
+    # Registro de servidores MCP, si los hay. Sus herramientas se ofrecen junto
+    # a las nativas y el modelo no distingue unas de otras.
+    mcp: object = None
 
     def permits(self, tool: Tool) -> tuple[bool, str]:
         """Si una herramienta se puede usar aqui, y por que no."""
@@ -292,17 +295,57 @@ _LISTA: list[Tool] = [
 TOOLS: dict[str, Tool] = {t.name: t for t in _LISTA}
 
 
+def mcp_tools(ctx: ToolContext) -> list[Tool]:
+    """Las herramientas MCP, envueltas como herramientas de Term.
+
+    Se marcan como de sistema porque un servidor externo puede hacer cualquier
+    cosa: sin permisos concedidos, no se ofrecen.
+    """
+    registro = ctx.mcp
+    if registro is None:
+        return []
+    envueltas: list[Tool] = []
+    for herramienta in registro.tools():  # type: ignore[attr-defined]
+        esquema = herramienta.schema or {}
+        propiedades = esquema.get("properties") or {}
+        requeridos = esquema.get("required") or []
+        envueltas.append(Tool(
+            name=herramienta.qualified,
+            description=(f"[{herramienta.server}] " + (herramienta.description or ""))[:1000],
+            params=propiedades if isinstance(propiedades, dict) else {},
+            required=tuple(r for r in requeridos if isinstance(r, str)),
+            handler=None,   # las ejecuta el registro, no una funcion local
+            system=True,
+        ))
+    return envueltas
+
+
 def available_tools(ctx: ToolContext) -> list[Tool]:
     """Herramientas que se le ofrecen al modelo en este contexto.
 
     Lo que no se puede usar ni se menciona: es mas honesto que ofrecerlo y
     negarlo despues.
     """
-    return [t for t in TOOLS.values() if ctx.permits(t)[0]]
+    candidatas = [*TOOLS.values(), *mcp_tools(ctx)]
+    return [t for t in candidatas if ctx.permits(t)[0]]
+
+
+async def execute_async(name: str, args: dict, ctx: ToolContext) -> tuple[bool, str]:
+    """Ejecutar una herramienta, sea nativa o de un servidor MCP."""
+    if name.startswith("mcp_") and ctx.mcp is not None:
+        envueltas = {t.name: t for t in mcp_tools(ctx)}
+        tool = envueltas.get(name)
+        if tool is None:
+            return False, f"No existe la herramienta «{name}»."
+        permitida, motivo = ctx.permits(tool)
+        if not permitida:
+            return False, motivo
+        return await ctx.mcp.call(name, args or {})  # type: ignore[attr-defined]
+    return execute(name, args, ctx)
 
 
 def execute(name: str, args: dict, ctx: ToolContext) -> tuple[bool, str]:
-    """Ejecutar una herramienta y devolver `(ok, texto para el modelo)`."""
+    """Ejecutar una herramienta nativa y devolver `(ok, texto para el modelo)`."""
     tool = TOOLS.get(name)
     if tool is None:
         return False, f"No existe la herramienta «{name}»."
