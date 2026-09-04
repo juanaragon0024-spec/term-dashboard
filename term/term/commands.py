@@ -68,7 +68,11 @@ COMMAND_GROUPS: dict[str, dict[str, str]] = {
         "/workdir <ruta>":        "Cambiar el directorio de trabajo",
     },
     "grp_system": {
-        "/run <cmd>":             "Ejecutar un comando de shell y ver su salida",
+        "/run <cmd>":             "Ejecutar un comando y esperar su salida",
+        "/bg <cmd>":              "Lanzar un comando en segundo plano (servidor, tests…)",
+        "/jobs":                  "Ver los procesos en segundo plano",
+        "/logs [n] [texto]":      "Ver la salida de un proceso, filtrando si quieres",
+        "/stop [n]":              "Parar un proceso; sin número, todos",
         "/open <app>":            "Abrir una aplicación",
         "/close-app <app>":       "Cerrar una aplicación",
         "/web <consulta>":        "Buscar en Google desde el navegador",

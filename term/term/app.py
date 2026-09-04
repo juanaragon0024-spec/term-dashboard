@@ -32,6 +32,7 @@ from textual.widgets import (
 )
 
 from . import config as cfg_mod
+from . import jobs as jobs_mod
 from . import keys as keystore
 from . import mcp as mcp_mod
 from . import syscontrol as sysctl
@@ -384,6 +385,7 @@ class TermApp(App):
         # abrir Term: lanzar procesos por si acaso es un mal negocio.
         self._mcp = mcp_mod.McpRegistry()
         self._skeleton: bool = cfg["code_skeleton"]
+        self._jobs = jobs_mod.JobManager()
         super().__init__()
         self.workdir = workdir or cfg["workdir"]
         self.theme_key = theme or cfg["theme"]
@@ -619,7 +621,10 @@ class TermApp(App):
 
         ref = chat.model_ref if chat else self.current_model
         put("#status-model", f"[bold]{self._t('model_label')}:[/] {model_label(ref)}")
-        put("#status-git", f" {self._git_branch}" if self._git_branch else "")
+        corriendo = len(self._jobs.running())
+        put("#status-git",
+            (f" {self._git_branch}" if self._git_branch else "")
+            + (f"  ▶{corriendo}" if corriendo else ""))
 
         wd = self.workdir
         home = str(Path.home())
@@ -884,7 +889,8 @@ class TermApp(App):
         self.notify(self._t("session_cleared"), timeout=3)
 
     async def on_unmount(self) -> None:
-        """Parar los servidores MCP al cerrar, para no dejar procesos sueltos."""
+        """No dejar nada corriendo al cerrar Term."""
+        await self._jobs.stop_all()
         await self._mcp.stop_all()
 
     async def action_cancel(self) -> None:
@@ -1149,6 +1155,7 @@ class TermApp(App):
                 restricted=not self._permissions_granted,
                 allowed_tools=PERMISSION_PROFILES[self._tool_profile],
                 mcp=self._mcp if self._mcp.clients else None,
+                jobs=self._jobs if self._jobs.jobs else None,
             )
             async for event in stream:
                 if event.kind == "text" and assistant is not None:
@@ -1487,6 +1494,18 @@ class TermApp(App):
         # -- sistema --------------------------------------------------------
         elif cmd == "/run":
             await self._cmd_run(arg, tab_id)
+
+        elif cmd == "/bg":
+            await self._cmd_bg(arg, tab_id)
+
+        elif cmd == "/jobs":
+            await self._cmd_jobs(tab_id)
+
+        elif cmd == "/logs":
+            await self._cmd_logs(arg, tab_id)
+
+        elif cmd == "/stop":
+            await self._cmd_stop(arg)
 
         elif cmd == "/open":
             if arg:
@@ -1859,6 +1878,11 @@ class TermApp(App):
         if not self._permissions_granted:
             self.notify(self._t("perms_denied"), timeout=3)
             return
+        if jobs_mod.looks_long_running(arg):
+            # Esperar a un servidor con /run cuelga la interfaz hasta que salta
+            # el tope de diez segundos.
+            self.notify(f"Eso no termina solo. Prueba: /bg {arg}", timeout=6)
+            return
         result = sysctl.run_shell(arg, self.workdir)
         if not result:
             self.notify(
@@ -1867,9 +1891,80 @@ class TermApp(App):
             )
             return
         await self._post_info(
-            tab_id, f"[dim]$ {arg}[/]\n\n{result.output or self._t('no_output')}",
+            tab_id,
+            f"[dim]$ {escape(arg)}[/]\n\n"
+            f"{escape(result.output or self._t('no_output'))}",
             listing=True,
         )
+
+    async def _cmd_bg(self, arg: str, tab_id: str) -> None:
+        """Lanzar un comando sin quedarse esperándolo."""
+        if not arg:
+            self.notify("Uso: /bg <comando>", timeout=3)
+            return
+        if not self._permissions_granted:
+            self.notify(self._t("perms_denied"), timeout=3)
+            return
+        job = await self._jobs.start(arg, self.workdir)
+        await self._post_info(
+            tab_id,
+            f"[bold]Lanzado[/] {escape(f'[{job.id}] {arg}')}\n"
+            f"[dim]/logs {job.id} para ver la salida · /stop {job.id} para pararlo[/]",
+            listing=True,
+        )
+        self._refresh_status()
+
+    async def _cmd_jobs(self, tab_id: str) -> None:
+        trabajos = self._jobs.listing()
+        if not trabajos:
+            await self._post_info(tab_id, (
+                "No hay procesos en segundo plano.\n\n"
+                "  [bold]/bg npm run dev[/]   lanza uno sin bloquear Term"
+            ), listing=True)
+            return
+        lineas = ["[bold]Procesos en segundo plano[/]\n"]
+        for job in trabajos:
+            marca = ("[bold green]•[/]" if job.running
+                     else "[dim]◦[/]" if job.stopped or job.exit_code == 0
+                     else "[bold red]×[/]")
+            lineas.append(
+                f"  {marca} [bold]{job.id}[/]  {escape(job.command)}\n"
+                f"      [dim]{job.status} · {job.elapsed_label} · "
+                f"{len(job.lines)} líneas[/]")
+        lineas.append("\n[dim]/logs <n> para la salida · /stop <n> para pararlo[/]")
+        await self._post_info(tab_id, "\n".join(lineas), listing=True)
+
+    async def _cmd_logs(self, arg: str, tab_id: str) -> None:
+        """Salida de un proceso, con filtro opcional."""
+        partes = arg.split(None, 1)
+        numero = int(partes[0]) if partes and partes[0].isdigit() else None
+        filtro = partes[1] if numero is not None and len(partes) > 1 else arg.strip()
+
+        job = self._jobs.get(numero) if numero else self._jobs.latest()
+        if job is None:
+            self.notify("No hay ningún proceso con ese número", timeout=3)
+            return
+        cuerpo = job.search(filtro, 60) if filtro else job.tail(60)
+        if not cuerpo:
+            cuerpo = f"(ninguna línea contiene «{filtro}»)"
+        await self._post_info(
+            tab_id,
+            f"[bold]{escape(f'[{job.id}] {job.command}')}[/]  [dim]{job.status}[/]"
+            f"\n\n{escape(cuerpo)}",
+            listing=True,
+        )
+
+    async def _cmd_stop(self, arg: str) -> None:
+        if arg.strip().isdigit():
+            numero = int(arg.strip())
+            parado = await self._jobs.stop(numero)
+            self.notify(f"Proceso {numero} parado" if parado
+                        else f"El proceso {numero} no estaba corriendo", timeout=2)
+        else:
+            cuantos = await self._jobs.stop_all()
+            self.notify(f"{cuantos} proceso(s) parados" if cuantos
+                        else "No había ninguno corriendo", timeout=2)
+        self._refresh_status()
 
     async def _cmd_browse(self, arg: str, tab_id: str) -> None:
         url = arg or "https://www.google.com"

@@ -50,6 +50,9 @@ class ToolContext:
     # Registro de servidores MCP, si los hay. Sus herramientas se ofrecen junto
     # a las nativas y el modelo no distingue unas de otras.
     mcp: object = None
+    # Procesos en segundo plano, para que el modelo pueda leer sus logs y
+    # ayudar con lo que esté fallando sin que se los peguen a mano.
+    jobs: object = None
 
     def permits(self, tool: Tool) -> tuple[bool, str]:
         """Si una herramienta se puede usar aqui, y por que no."""
@@ -171,6 +174,20 @@ def _info(ctx: ToolContext) -> sysctl.SysResult:
     return sysctl.system_info()
 
 
+def _procesos(ctx: ToolContext) -> sysctl.SysResult:
+    if ctx.jobs is None:
+        return sysctl.SysResult(True, output="No hay procesos en segundo plano.")
+    return sysctl.SysResult(True, output=ctx.jobs.summary_for_ai())  # type: ignore[attr-defined]
+
+
+def _logs(ctx: ToolContext, numero: int | None = None,
+          buscar: str = "") -> sysctl.SysResult:
+    if ctx.jobs is None:
+        return sysctl.SysResult(False, reason="logs|no hay procesos en marcha")
+    texto = ctx.jobs.logs_for_ai(numero, buscar)  # type: ignore[attr-defined]
+    return sysctl.SysResult(True, output=texto)
+
+
 # ---------------------------------------------------------------------------
 # Catalogo
 # ---------------------------------------------------------------------------
@@ -282,6 +299,30 @@ _LISTA: list[Tool] = [
         params={"name": {"type": "string", "description": "Nombre de la aplicación"}},
         required=("name",),
         handler=_abrir_app,
+        system=True,
+    ),
+    Tool(
+        name="procesos_en_marcha",
+        description=(
+            "Listar los procesos que el usuario tiene corriendo en segundo plano "
+            "(servidores, tests, compilaciones) con su estado."
+        ),
+        handler=_procesos,
+        system=True,
+    ),
+    Tool(
+        name="ver_logs",
+        description=(
+            "Leer la salida de un proceso en segundo plano. Sin número se lee el "
+            "último lanzado. Úsalo cuando pregunten por qué algo falla."
+        ),
+        params={
+            "numero": {"type": "integer",
+                       "description": "Número del proceso, el que sale entre corchetes"},
+            "buscar": {"type": "string",
+                       "description": "Mostrar solo las líneas que contengan este texto"},
+        },
+        handler=_logs,
         system=True,
     ),
     Tool(
