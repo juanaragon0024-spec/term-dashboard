@@ -54,3 +54,34 @@ class TestPromptDeSistema:
 
     def test_un_idioma_desconocido_cae_en_el_predeterminado(self):
         assert build_system_context("xx")
+
+
+class TestGrupos:
+    def test_la_vista_plana_contiene_todos_los_comandos_agrupados(self):
+        from term.commands import COMMAND_GROUPS
+
+        agrupados = {c for g in COMMAND_GROUPS.values() for c in g}
+        assert agrupados == set(COMMANDS_HELP)
+
+    def test_ningun_comando_esta_en_dos_grupos(self):
+        from term.commands import COMMAND_GROUPS
+
+        vistos: set[str] = set()
+        for grupo in COMMAND_GROUPS.values():
+            repetidos = vistos & set(grupo)
+            assert not repetidos, f"repetidos: {repetidos}"
+            vistos |= set(grupo)
+
+    def test_cada_grupo_tiene_su_titulo_traducido(self):
+        """El nombre del grupo es la clave de su título en las traducciones."""
+        from term.commands import COMMAND_GROUPS
+        from term.i18n import LANGUAGES, TRANSLATIONS
+
+        for grupo in COMMAND_GROUPS:
+            for code in LANGUAGES:
+                assert TRANSLATIONS[code].get(grupo), f"{code} no traduce {grupo}"
+
+    def test_ningun_grupo_esta_vacio(self):
+        from term.commands import COMMAND_GROUPS
+
+        assert all(grupo for grupo in COMMAND_GROUPS.values())

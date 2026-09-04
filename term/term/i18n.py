@@ -1274,3 +1274,156 @@ _EXTRA: dict[str, dict[str, str]] = {
 for _key, _by_lang in _EXTRA.items():
     for _code in LANGUAGES:
         TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+# Titulos de la ayuda: los grupos de comandos y las secciones del panel.
+_HELP_EXTRA: dict[str, dict[str, str]] = {
+    "grp_chat": {
+        "es": "Conversación", "en": "Conversation", "pt": "Conversa",
+        "fr": "Conversation", "de": "Unterhaltung", "it": "Conversazione",
+        "zh": "对话", "ja": "会話", "ko": "대화", "ar": "المحادثة",
+    },
+    "grp_ai": {
+        "es": "Modelos e IA", "en": "Models and AI", "pt": "Modelos e IA",
+        "fr": "Modèles et IA", "de": "Modelle und KI", "it": "Modelli e IA",
+        "zh": "模型与 AI", "ja": "モデルと AI", "ko": "모델과 AI",
+        "ar": "النماذج والذكاء الاصطناعي",
+    },
+    "grp_files": {
+        "es": "Archivos y búsqueda", "en": "Files and search",
+        "pt": "Ficheiros e pesquisa", "fr": "Fichiers et recherche",
+        "de": "Dateien und Suche", "it": "File e ricerca",
+        "zh": "文件与搜索", "ja": "ファイルと検索", "ko": "파일과 검색",
+        "ar": "الملفات والبحث",
+    },
+    "grp_system": {
+        "es": "Sistema", "en": "System", "pt": "Sistema", "fr": "Système",
+        "de": "System", "it": "Sistema", "zh": "系统", "ja": "システム",
+        "ko": "시스템", "ar": "النظام",
+    },
+    "grp_look": {
+        "es": "Aspecto y paneles", "en": "Look and panels",
+        "pt": "Aparência e painéis", "fr": "Apparence et panneaux",
+        "de": "Aussehen und Panels", "it": "Aspetto e pannelli",
+        "zh": "外观与面板", "ja": "外観とパネル", "ko": "모양과 패널",
+        "ar": "المظهر واللوحات",
+    },
+    "grp_meta": {
+        "es": "Term", "en": "Term", "pt": "Term", "fr": "Term", "de": "Term",
+        "it": "Term", "zh": "Term", "ja": "Term", "ko": "Term", "ar": "Term",
+    },
+    "help_connect": {
+        "es": "Cómo conectar una IA", "en": "How to connect an AI",
+        "pt": "Como ligar uma IA", "fr": "Comment connecter une IA",
+        "de": "Eine KI verbinden", "it": "Come collegare un'IA",
+        "zh": "如何连接 AI", "ja": "AI をつなぐ", "ko": "AI 연결하기",
+        "ar": "كيفية توصيل ذكاء اصطناعي",
+    },
+    "help_connect_cli": {
+        "es": "Por línea de comandos — la CLI trae su propio agente",
+        "en": "Via command line — the CLI brings its own agent",
+        "pt": "Por linha de comandos — a CLI traz o seu próprio agente",
+        "fr": "En ligne de commande — la CLI apporte son propre agent",
+        "de": "Über die Kommandozeile — die CLI bringt ihren Agenten mit",
+        "it": "Da riga di comando — la CLI porta il proprio agente",
+        "zh": "通过命令行 —— CLI 自带代理",
+        "ja": "コマンドラインから — CLI が自前のエージェントを持つ",
+        "ko": "명령줄로 — CLI가 자체 에이전트를 가져옵니다",
+        "ar": "عبر سطر الأوامر — تأتي الأداة بوكيلها الخاص",
+    },
+    "help_connect_api": {
+        "es": "Por API — Term ejecuta las herramientas por su cuenta",
+        "en": "Via API — Term runs the tools itself",
+        "pt": "Por API — o Term executa as ferramentas por si próprio",
+        "fr": "Par API — Term exécute les outils lui-même",
+        "de": "Über API — Term führt die Werkzeuge selbst aus",
+        "it": "Via API — Term esegue gli strumenti da solo",
+        "zh": "通过 API —— 由 Term 自己执行工具",
+        "ja": "API 経由 — ツールは Term 自身が実行する",
+        "ko": "API로 — 도구는 Term이 직접 실행합니다",
+        "ar": "عبر واجهة برمجية — ينفّذ Term الأدوات بنفسه",
+    },
+    "help_can_do": {
+        "es": "Qué le puedes pedir en el chat", "en": "What you can ask in the chat",
+        "pt": "O que lhe podes pedir no chat", "fr": "Ce que vous pouvez demander",
+        "de": "Was du im Chat verlangen kannst", "it": "Cosa puoi chiedere in chat",
+        "zh": "可以在对话里让它做什么", "ja": "チャットで頼めること",
+        "ko": "채팅에서 부탁할 수 있는 것", "ar": "ما يمكنك طلبه في المحادثة",
+    },
+    "help_tabs": {
+        "es": "Cada pestaña es independiente: su IA, su conversación y su gasto.",
+        "en": "Each tab is independent: its own AI, conversation and spend.",
+        "pt": "Cada separador é independente: a sua IA, conversa e gasto.",
+        "fr": "Chaque onglet est indépendant : son IA, sa conversation, ses coûts.",
+        "de": "Jeder Tab ist eigenständig: eigene KI, Unterhaltung und Kosten.",
+        "it": "Ogni scheda è indipendente: la sua IA, conversazione e spesa.",
+        "zh": "每个标签页彼此独立：各自的 AI、对话和花费。",
+        "ja": "タブはそれぞれ独立しています。AI も会話も費用も別々です。",
+        "ko": "각 탭은 독립적입니다: 각자의 AI, 대화, 비용.",
+        "ar": "كل تبويبة مستقلة: ذكاؤها ومحادثتها وتكلفتها.",
+    },
+    "help_more": {
+        "es": "Escribe / para ver los comandos mientras escribes, y Tab para completar.",
+        "en": "Type / to see commands as you type, and Tab to complete.",
+        "pt": "Escreve / para ver os comandos enquanto escreves, e Tab para completar.",
+        "fr": "Tapez / pour voir les commandes, et Tab pour compléter.",
+        "de": "Tippe / für die Befehle und Tab zum Vervollständigen.",
+        "it": "Scrivi / per vedere i comandi e Tab per completare.",
+        "zh": "输入 / 边打边看命令，按 Tab 补全。",
+        "ja": "/ を打つとコマンドが表示され、Tab で補完できます。",
+        "ko": "/를 입력하면 명령이 보이고, Tab으로 자동완성됩니다.",
+        "ar": "اكتب / لعرض الأوامر أثناء الكتابة، و Tab للإكمال.",
+    },
+}
+
+for _key, _by_lang in _HELP_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])
+
+
+# La descripcion de Term se reescribe aqui: la original decia que solo hablaba
+# con CLIs por OAuth, que dejo de ser cierto al aparecer la conexion por API.
+_ABOUT_EXTRA: dict[str, dict[str, str]] = {
+    "what_is_desc": {
+        "es": "Una terminal con IA. Conecta con Claude, GPT, Gemini, Grok o un\n"
+              "  modelo local, y actúa: crea archivos, busca, abre apps y controla\n"
+              "  tu música — todo sin salir de aquí.",
+        "en": "A terminal with AI. Connect Claude, GPT, Gemini, Grok or a local\n"
+              "  model, and it acts: creates files, searches, opens apps and controls\n"
+              "  your music — all without leaving here.",
+        "pt": "Um terminal com IA. Liga o Claude, GPT, Gemini, Grok ou um modelo\n"
+              "  local, e age: cria ficheiros, procura, abre apps e controla a tua\n"
+              "  música — tudo sem sair daqui.",
+        "fr": "Un terminal avec IA. Connectez Claude, GPT, Gemini, Grok ou un\n"
+              "  modèle local, et il agit : crée des fichiers, cherche, ouvre des\n"
+              "  applis et pilote votre musique — sans quitter le terminal.",
+        "de": "Ein Terminal mit KI. Verbinde Claude, GPT, Gemini, Grok oder ein\n"
+              "  lokales Modell, und es handelt: legt Dateien an, sucht, öffnet Apps\n"
+              "  und steuert deine Musik — alles von hier aus.",
+        "it": "Un terminale con IA. Collega Claude, GPT, Gemini, Grok o un modello\n"
+              "  locale, e agisce: crea file, cerca, apre app e controlla la tua\n"
+              "  musica — tutto senza uscire da qui.",
+        "zh": "带 AI 的终端。接上 Claude、GPT、Gemini、Grok 或本地模型，它就能动手：\n"
+              "  建文件、搜索、开应用、控制音乐 —— 全都不用离开这里。",
+        "ja": "AI を積んだターミナル。Claude、GPT、Gemini、Grok、ローカルモデルを\n"
+              "  つなぐと実際に動きます。ファイルを作り、検索し、アプリを開き、\n"
+              "  音楽を操作する — すべてここから。",
+        "ko": "AI가 들어간 터미널. Claude, GPT, Gemini, Grok 또는 로컬 모델을 연결하면\n"
+              "  직접 움직입니다: 파일을 만들고, 찾고, 앱을 열고, 음악을 제어합니다 —\n"
+              "  모두 여기서.",
+        "ar": "طرفية بذكاء اصطناعي. تُوصّل Claude أو GPT أو Gemini أو Grok أو نموذجًا\n"
+              "  محليًا، فتعمل فعليًا: تنشئ الملفات وتبحث وتفتح التطبيقات وتتحكم\n"
+              "  بموسيقاك — كل ذلك من هنا.",
+    },
+    "term_subtitle": {
+        "es": "terminal con IA que actúa", "en": "an AI terminal that acts",
+        "pt": "terminal com IA que age", "fr": "un terminal IA qui agit",
+        "de": "ein KI-Terminal, das handelt", "it": "un terminale IA che agisce",
+        "zh": "会动手的 AI 终端", "ja": "実際に動く AI ターミナル",
+        "ko": "직접 움직이는 AI 터미널", "ar": "طرفية ذكاء اصطناعي تعمل فعليًا",
+    },
+}
+
+for _key, _by_lang in _ABOUT_EXTRA.items():
+    for _code in LANGUAGES:
+        TRANSLATIONS[_code][_key] = _by_lang.get(_code, _by_lang["es"])

@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 
+from rich.markup import escape
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -34,6 +35,7 @@ from . import config as cfg_mod
 from . import keys as keystore
 from . import syscontrol as sysctl
 from .commands import (
+    COMMAND_GROUPS,
     COMMANDS_HELP,
     SHORTCUTS_HELP,
     build_system_context,
@@ -888,7 +890,9 @@ class TermApp(App):
             return
         head = stripped.split()[0].lower()
         matches = [
-            f"  [bold]{cmd}[/]  [dim]{desc}[/]"
+            # Los corchetes de /new [nombre] son sintaxis de marcado: sin
+            # escaparlos, Rich se los come y el comando aparece a medias.
+            f"  [bold]{escape(cmd)}[/]  [dim]{escape(desc)}[/]"
             for cmd, desc in COMMANDS_HELP.items()
             if stripped == "/" or cmd.split()[0].startswith(head)
         ]
@@ -931,7 +935,8 @@ class TermApp(App):
 
         if text == "/":
             lines = [f"[bold]{self._t('commands_available')}:[/]\n"]
-            lines += [f"  [bold]{c:26s}[/] {d}" for c, d in COMMANDS_HELP.items()]
+            lines += [f"  [bold]{escape(f'{c:26s}')}[/] {escape(d)}"
+                      for c, d in COMMANDS_HELP.items()]
             await self._post_info(tab_id, "\n".join(lines))
             return
 
@@ -1895,29 +1900,68 @@ class TermApp(App):
         return "\n".join(lines)
 
     def _panel_help(self) -> str:
-        lines = [
+        """Ayuda del panel /help.
+
+        Se arma por secciones y con los comandos agrupados: la version anterior
+        volcaba los cincuenta de golpe y no habia forma de encontrar ninguno.
+        """
+        from .providers import all_providers
+
+        ancho = 26
+        lineas = [
             build_logo(self.theme_key),
             "",
-            f"[bold]Term v{VERSION}[/] -- {self._t('term_subtitle')}",
+            f"[bold]Term v{VERSION}[/]  [dim]{self._t('term_subtitle')}[/]",
             "",
-            f"[bold]{self._t('what_is')}[/]",
             f"  {self._t('what_is_desc')}",
+            f"  [dim]{self._t('help_tabs')}[/]",
             "",
-            f"[bold]{self._t('commands_title')}:[/]",
         ]
-        lines += [f"  [bold]{c:26s}[/] {d}" for c, d in COMMANDS_HELP.items()]
-        lines += ["", f"[bold]{self._t('shortcuts_title')}:[/]"]
-        lines += [f"  [bold]{k:26s}[/] {d}" for k, d in SHORTCUTS_HELP.items()]
-        lines += [
+
+        # -- como conectar una IA, con lo que hay listo en esta maquina
+        lineas.append(f"[bold]{self._t('help_connect')}[/]")
+        for transporte, titulo in (("cli", "help_connect_cli"), ("api", "help_connect_api")):
+            proveedores = [p for p in all_providers().values()
+                           if p.transport == transporte]
+            lineas.append(f"\n  [bold]{self._t(titulo)}[/]")
+            for provider in proveedores:
+                marca = "[bold green]•[/]" if provider.available() else "[dim]◦[/]"
+                nombre = f"{provider.name} [dim]({provider.key})[/]"
+                lineas.append(f"    {marca} {nombre}")
+        lineas += [
             "",
-            f"[bold]{self._t('system_examples')}:[/]",
-            "  'abre Safari'",
-            "  'siguiente canción en Spotify'",
-            "  'pon el volumen a 50'",
+            "    [dim]/key openrouter <clave>      guardar una clave[/]",
+            "    [dim]/model openrouter/x-ai/grok-4   usar esa IA aquí[/]",
             "",
+        ]
+
+        # -- ejemplos de lo que entiende en lenguaje normal
+        lineas.append(f"[bold]{self._t('help_can_do')}[/]")
+        lineas += [
+            "  [dim]«crea una carpeta notas y mete dentro un README»[/]",
+            "  [dim]«busca dónde está el archivo de configuración»[/]",
+            "  [dim]«pon la siguiente canción»[/]",
+            "  [dim]«abre el navegador y busca vuelos a Lisboa»[/]",
+            "  [dim]«qué archivos de este proyecto mencionan ChatSession»[/]",
+            "",
+        ]
+
+        # -- comandos, por grupos
+        for grupo, comandos in COMMAND_GROUPS.items():
+            lineas.append(f"[bold]{self._t(grupo)}[/]")
+            lineas += [f"  [bold]{escape(f'{cmd:{ancho}s}')}[/] {escape(desc)}"
+                       for cmd, desc in comandos.items()]
+            lineas.append("")
+
+        lineas.append(f"[bold]{self._t('shortcuts_title')}[/]")
+        lineas += [f"  [bold]{escape(f'{key:{ancho}s}')}[/] {escape(desc)}"
+                   for key, desc in SHORTCUTS_HELP.items()]
+        lineas += [
+            "",
+            f"[dim]{self._t('help_more')}[/]",
             f"[dim]{self._t('config_path', path=cfg_mod.CONFIG_PATH)}[/]",
         ]
-        return "\n".join(lines)
+        return "\n".join(lineas)
 
 
 # ---------------------------------------------------------------------------

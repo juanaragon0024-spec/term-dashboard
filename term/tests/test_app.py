@@ -562,3 +562,62 @@ class TestPestanasConIaPropia:
         await pilot.pause()
         segunda = application._active_chat()
         assert primera.session.session_id != segunda.session.session_id
+
+
+class TestAyuda:
+    async def test_los_corchetes_de_un_comando_sobreviven_al_marcado(self, app):
+        """Rich trata [nombre] como una etiqueta de estilo: sin escaparlo, el
+        usuario ve «/new» a secas y no sabe que admite argumentos."""
+        application, _ = app
+        ayuda = application._panel_help()
+        assert "/new" in ayuda
+        assert r"\[nombre]" in ayuda or "[nombre]" not in ayuda.replace(r"\[", "")
+
+    async def test_lo_que_se_pinta_conserva_los_argumentos(self, app):
+        from rich.console import Console
+
+        application, _ = app
+        consola = Console(file=__import__("io").StringIO(), width=200)
+        consola.print(application._panel_help())
+        pintado = consola.file.getvalue()
+        assert "[nombre]" in pintado
+        assert "[0-100]" in pintado
+
+    async def test_la_ayuda_lista_todos_los_comandos(self, app):
+        from term.commands import COMMANDS_HELP
+
+        application, _ = app
+        ayuda = application._panel_help()
+        for cmd in COMMANDS_HELP:
+            assert cmd.split()[0] in ayuda
+
+    async def test_la_ayuda_explica_las_dos_formas_de_conectar(self, app):
+        application, _ = app
+        ayuda = application._panel_help()
+        assert application._t("help_connect_cli") in ayuda
+        assert application._t("help_connect_api") in ayuda
+        # Y nombra los proveedores concretos.
+        assert "Claude Code" in ayuda
+        assert "OpenRouter" in ayuda
+
+    async def test_la_ayuda_marca_lo_que_esta_listo(self, app):
+        """Un punto verde en lo instalado y hueco en lo que falta."""
+        application, _ = app
+        ayuda = application._panel_help()
+        assert "•" in ayuda and "◦" in ayuda
+
+    async def test_la_ayuda_esta_en_el_idioma_activo(self, app):
+        application, _ = app
+        application._lang = "en"
+        ayuda = application._panel_help()
+        assert "Conversation" in ayuda
+        application._lang = "es"
+        assert "Conversación" in application._panel_help()
+
+    async def test_las_sugerencias_escapan_los_corchetes(self, app):
+        application, pilot = app
+        chat = application._active_chat()
+        application._show_suggestions(chat.tab_id, "/new")
+        await pilot.pause()
+        # Basta con que no reviente al pintar un comando con corchetes.
+        assert application.query_one(f"#cmdsug-{chat.tab_id}").has_class("visible")
